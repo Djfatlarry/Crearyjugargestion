@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crear y Jugar — Gestión diaria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --purple:#8F83B9;
+  --purple-dark:#52486C;
+  --purple-light:#EFEDF8;
+  --purple-pale:#F7F6FC;
+  --peach:#F7D5C4;
+  --peach-dark:#A86A4C;
+  --mint:#BCE3DE;
+  --mint-dark:#3D7E73;
+  --yellow:#FFF0B3;
+  --yellow-dark:#8C6D00;
+  --coral:#F4A896;
+  --coral-dark:#A8543B;
+  --ink:#2A2536;
+  --ink-soft:#6B6478;
+  --line:#E4E0F0;
+  --surface:#FFFFFF;
+  --bg:#FBFAFD;
+  --radius-sm:8px;
+  --radius-md:12px;
+  --radius-lg:18px;
+  --shadow-card:0 1px 2px rgba(82,72,108,0.06), 0 4px 16px rgba(82,72,108,0.05);
+  --good:#3D7E73;
+  --warn:#B8940A;
+  --bad:#A8543B;
+}
+body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;}
+.shell{max-width:920px;margin:0 auto;padding:1.75rem 1.25rem 4rem;}
+
+.header{background:linear-gradient(135deg, var(--purple-dark) 0%, #463D5C 100%);background-size:cover;background-position:center;border-radius:var(--radius-lg);padding:1.5rem 1.75rem;margin-bottom:1.75rem;display:flex;align-items:center;gap:18px;box-shadow:var(--shadow-card);position:relative;}
+.header.has-banner{background-blend-mode:overlay;}
+.header.has-banner::before{content:'';position:absolute;inset:0;background:rgba(42,37,54,0.45);border-radius:var(--radius-lg);}
+.header > *{position:relative;z-index:1;}
+.brand-mark{width:60px;height:60px;flex-shrink:0;}
+.header-text h1{font-family:'Fraunces',serif;font-size:23px;font-weight:600;color:#fff;letter-spacing:-0.01em;}
+.header-text p{font-size:13px;color:rgba(255,255,255,0.55);margin-top:3px;font-weight:500;}
+.header-right{margin-left:auto;text-align:right;}
+.header-badge{font-size:11px;color:rgba(255,255,255,0.45);font-weight:600;letter-spacing:0.02em;}
+.header-clock{font-size:13px;color:#fff;font-weight:700;margin-top:2px;}
+
+.topnav{display:flex;gap:4px;background:var(--purple-light);border-radius:var(--radius-lg);padding:5px;margin-bottom:1.5rem;flex-wrap:wrap;}
+.navtab{flex:1;min-width:90px;padding:11px 6px;font-size:13.5px;font-weight:700;cursor:pointer;border:none;background:none;color:var(--purple-dark);border-radius:var(--radius-md);font-family:'Nunito',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s ease;}
+.navtab svg{width:16px;height:16px;flex-shrink:0;}
+.navtab.active{background:var(--purple-dark);color:#fff;box-shadow:0 2px 8px rgba(82,72,108,0.25);}
+.navtab:not(.active):hover{background:rgba(82,72,108,0.08);}
+.view{display:none;}
+.view.active{display:block;animation:fadein .2s ease;}
+@keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:1.5rem;box-shadow:var(--shadow-card);}
+.card + .card{margin-top:1.25rem;}
+
+.search-wrap{position:relative;margin-bottom:12px;}
+.search-wrap svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--ink-soft);}
+.search-wrap input{width:100%;padding:13px 14px 13px 42px;font-size:15px;font-family:'Nunito',sans-serif;border-radius:var(--radius-md);border:1.5px solid var(--line);background:var(--purple-pale);color:var(--ink);transition:border-color .15s;}
+.search-wrap input:focus{outline:none;border-color:var(--purple);background:#fff;}
+.search-wrap input::placeholder{color:var(--ink-soft);}
+
+.results{display:flex;flex-direction:column;gap:6px;margin-bottom:1.5rem;max-height:300px;overflow-y:auto;}
+.result-item{background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius-md);padding:11px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:all .12s;}
+.result-item:hover{border-color:var(--purple);background:var(--purple-pale);}
+.result-name{font-size:14.5px;font-weight:700;color:var(--ink);}
+.result-meta{font-size:11.5px;color:var(--ink-soft);margin-top:1px;}
+.result-price{font-size:15px;font-weight:800;color:var(--purple-dark);white-space:nowrap;margin-left:10px;}
+.no-results{font-size:13px;color:var(--ink-soft);padding:14px;text-align:center;}
+
+.section-label{font-size:11.5px;color:var(--purple-dark);text-transform:uppercase;letter-spacing:0.07em;font-weight:800;margin-bottom:10px;}
+.cart-items{display:flex;flex-direction:column;gap:8px;margin-bottom:1.25rem;}
+.cart-item{display:flex;align-items:center;gap:10px;background:var(--purple-light);border-radius:var(--radius-md);padding:10px 12px;}
+.cart-item-name{font-size:13.5px;font-weight:700;color:var(--purple-dark);}
+.cart-item-unit{font-size:11.5px;color:var(--ink-soft);margin-top:1px;}
+.qty-ctrl{display:flex;align-items:center;gap:7px;}
+.qty-btn{width:27px;height:27px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:7px;border:1.5px solid var(--purple);background:#fff;cursor:pointer;color:var(--purple-dark);transition:background .12s;}
+.qty-btn:hover{background:var(--purple);color:#fff;}
+.qty-btn svg{width:13px;height:13px;}
+.qty-val{font-size:14px;min-width:16px;text-align:center;font-weight:800;color:var(--purple-dark);}
+.cart-item-total{font-size:14px;font-weight:800;min-width:68px;text-align:right;color:var(--purple-dark);}
+.remove-btn{background:none;border:none;cursor:pointer;color:var(--ink-soft);padding:3px;display:flex;}
+.remove-btn:hover{color:var(--peach-dark);}
+.remove-btn svg{width:16px;height:16px;}
+.empty-cart{text-align:center;padding:2rem 1rem;color:var(--ink-soft);font-size:13.5px;background:var(--purple-pale);border-radius:var(--radius-md);}
+
+.summary-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1.5px solid var(--line);}
+.summary-row input{width:64px;text-align:right;padding:7px 9px;font-size:13.5px;border-radius:7px;border:1.5px solid var(--line);font-family:'Nunito',sans-serif;}
+.summary-row input:focus{outline:none;border-color:var(--purple);}
+.total-row{display:flex;align-items:baseline;justify-content:space-between;margin:0.5rem 0 1.5rem;}
+.total-label{font-size:14.5px;color:var(--ink-soft);font-weight:600;}
+.total-val{font-family:'Fraunces',serif;font-size:32px;font-weight:600;color:var(--purple-dark);}
+
+.pay-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1.5rem;}
+.pay-btn{font-size:13px;padding:12px 6px;border-radius:var(--radius-md);border:1.5px solid var(--line);background:#fff;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;color:var(--ink);transition:all .12s;}
+.pay-btn:hover{border-color:var(--purple);}
+.pay-btn.selected{background:var(--purple-dark);color:#fff;border-color:var(--purple-dark);}
+
+.confirm-btn{width:100%;background:var(--purple-dark);color:#fff;border:none;padding:16px;font-size:16px;font-weight:800;border-radius:var(--radius-md);cursor:pointer;font-family:'Nunito',sans-serif;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .15s;box-shadow:0 3px 12px rgba(82,72,108,0.25);}
+.confirm-btn svg{width:18px;height:18px;}
+.confirm-btn:disabled{background:#D6D2E4;cursor:not-allowed;box-shadow:none;}
+.confirm-btn:hover:not(:disabled){background:var(--purple);}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--mint-dark);color:#fff;padding:13px 24px;border-radius:var(--radius-md);font-size:14px;font-weight:700;z-index:999;opacity:0;transition:all .25s ease;box-shadow:0 6px 24px rgba(0,0,0,0.18);display:flex;align-items:center;gap:8px;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast svg{width:18px;height:18px;}
+
+.metric-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:1.5rem;}
+.metric-grid.cols-4{grid-template-columns:repeat(4,1fr);}
+.metric-card{background:var(--purple-pale);border:1px solid var(--line);border-radius:var(--radius-md);padding:1.1rem 1.2rem;}
+.metric-label{font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;font-weight:600;}
+.metric-val{font-family:'Fraunces',serif;font-size:25px;font-weight:600;color:var(--purple-dark);}
+.metric-val.small{font-size:20px;}
+.metric-sub{font-size:11.5px;color:var(--ink-soft);margin-top:3px;}
+.metric-sub.good{color:var(--good);font-weight:700;}
+.metric-sub.bad{color:var(--bad);font-weight:700;}
+
+.section-title{font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:var(--purple-dark);margin:1.75rem 0 12px;}
+.section-title:first-child{margin-top:0;}
+.rank-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);}
+.rank-item:last-child{border-bottom:none;}
+.rank-num{width:26px;height:26px;border-radius:50%;background:var(--purple-light);color:var(--purple-dark);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.rank-name{flex:1;font-size:14px;font-weight:700;color:var(--ink);}
+.rank-meta{font-size:11.5px;color:var(--ink-soft);font-weight:500;margin-top:1px;}
+.rank-val{font-size:14px;font-weight:800;color:var(--purple-dark);}
+
+.cat-row{margin-bottom:12px;}
+.cat-row-top{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;}
+.cat-row-name{color:var(--ink-soft);font-weight:600;}
+.cat-row-val{font-weight:800;color:var(--purple-dark);}
+.cat-bar-bg{background:var(--purple-light);border-radius:6px;height:7px;overflow:hidden;}
+.cat-bar-fill{background:var(--purple);height:100%;border-radius:6px;transition:width .4s ease;}
+
+.empty-state{text-align:center;padding:2.5rem 1rem;color:var(--ink-soft);font-size:14px;background:var(--purple-pale);border-radius:var(--radius-md);}
+.empty-state svg{width:36px;height:36px;color:var(--purple);margin-bottom:10px;}
+
+.filter-row{display:flex;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap;}
+.filter-chip{font-size:13px;padding:8px 16px;border-radius:20px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;color:var(--ink-soft);transition:all .12s;}
+.filter-chip:hover{border-color:var(--purple);}
+.filter-chip.active{background:var(--purple-dark);color:#fff;border-color:var(--purple-dark);}
+
+.history-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);}
+.history-item:last-child{border-bottom:none;}
+.history-date{font-size:11.5px;color:var(--ink-soft);font-weight:600;}
+.history-desc{font-size:14px;font-weight:700;color:var(--ink);margin-top:2px;}
+.history-amt{font-size:15px;font-weight:800;color:var(--mint-dark);white-space:nowrap;margin-left:10px;}
+
+.chart-wrap{position:relative;width:100%;margin:1rem 0;}
+.legend-row{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:10px;font-size:12.5px;color:var(--ink-soft);font-weight:600;}
+.legend-dot{display:inline-flex;align-items:center;gap:6px;}
+.legend-sw{width:11px;height:11px;border-radius:3px;display:inline-block;}
+
+.period-toggle{display:flex;gap:6px;margin-bottom:1.25rem;}
+.period-btn{font-size:13px;padding:8px 14px;border-radius:var(--radius-md);border:1.5px solid var(--line);background:#fff;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;color:var(--ink-soft);}
+.period-btn.active{background:var(--purple);color:#fff;border-color:var(--purple);}
+
+.health-banner{border-radius:var(--radius-md);padding:1.25rem 1.4rem;margin-bottom:1.25rem;display:flex;gap:14px;align-items:flex-start;}
+.health-banner.good{background:#E9F4F1;}
+.health-banner.warn{background:#FBF3DC;}
+.health-banner.bad{background:#FAEAE5;}
+.health-icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.health-banner.good .health-icon{background:var(--good);color:#fff;}
+.health-banner.warn .health-icon{background:var(--warn);color:#fff;}
+.health-banner.bad .health-icon{background:var(--bad);color:#fff;}
+.health-icon svg{width:18px;height:18px;}
+.health-title{font-size:15px;font-weight:800;margin-bottom:3px;}
+.health-banner.good .health-title{color:var(--good);}
+.health-banner.warn .health-title{color:var(--warn);}
+.health-banner.bad .health-title{color:var(--bad);}
+.health-text{font-size:13.5px;color:var(--ink-soft);line-height:1.55;}
+
+.statement-table{width:100%;border-collapse:collapse;font-size:13.5px;}
+.statement-table tr{border-bottom:1px solid var(--line);}
+.statement-table tr:last-child{border-bottom:none;}
+.statement-table td{padding:9px 4px;}
+.statement-table td:last-child{text-align:right;font-weight:700;font-variant-numeric:tabular-nums;}
+.statement-table tr.subtotal td{font-weight:800;color:var(--purple-dark);border-top:1.5px solid var(--purple-light);}
+.statement-table tr.total td{font-weight:800;color:var(--purple-dark);border-top:2px solid var(--purple);font-size:15px;padding-top:12px;}
+.statement-table tr.indent td:first-child{padding-left:16px;color:var(--ink-soft);font-weight:500;}
+.statement-table tr.neg td:last-child{color:var(--bad);}
+.statement-table tr.pos td:last-child{color:var(--good);}
+
+.quarter-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1.25rem;}
+.quarter-card{background:var(--purple-pale);border:1.5px solid var(--line);border-radius:var(--radius-md);padding:0.9rem;cursor:pointer;text-align:center;transition:all .12s;}
+.quarter-card:hover{border-color:var(--purple);}
+.quarter-card.active{background:var(--purple-dark);border-color:var(--purple-dark);}
+.quarter-card.active .q-label, .quarter-card.active .q-val{color:#fff;}
+.q-label{font-size:11.5px;color:var(--ink-soft);font-weight:700;margin-bottom:4px;}
+.q-val{font-size:14px;font-weight:800;color:var(--purple-dark);}
+
+.placeholder-card{background:var(--purple-pale);border:1.5px dashed var(--purple);border-radius:var(--radius-md);padding:1.5rem;text-align:center;}
+.placeholder-card svg{width:32px;height:32px;color:var(--purple);margin-bottom:10px;}
+.placeholder-card p{font-size:13.5px;color:var(--ink-soft);line-height:1.55;}
+.placeholder-card .ph-title{font-size:15px;font-weight:800;color:var(--purple-dark);margin-bottom:6px;}
+
+.upload-tile{border:1.5px dashed var(--purple);border-radius:var(--radius-md);padding:1.1rem;text-align:center;cursor:pointer;background:var(--purple-pale);transition:background .12s;position:relative;overflow:hidden;}
+.upload-tile:hover{background:#E9E5F5;}
+.upload-tile input{display:none;}
+.upload-tile svg{width:22px;height:22px;color:var(--purple);margin-bottom:6px;}
+.upload-tile-label{font-size:13px;font-weight:700;color:var(--purple-dark);}
+.upload-tile-sub{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+.upload-preview-logo{width:64px;height:64px;border-radius:50%;object-fit:cover;margin:0 auto 8px;display:block;}
+.upload-preview-banner{width:100%;height:90px;border-radius:var(--radius-sm);object-fit:cover;margin-bottom:8px;display:block;}
+
+.form-row{display:grid;grid-template-columns:1fr 140px;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);}
+.form-row:last-child{border-bottom:none;}
+.form-row label{font-size:13.5px;font-weight:700;color:var(--ink);}
+.form-row input{padding:8px 10px;font-size:13.5px;border-radius:7px;border:1.5px solid var(--line);font-family:'Nunito',sans-serif;text-align:right;}
+.form-row input:focus{outline:none;border-color:var(--purple);}
+.form-row .input-prefix{position:relative;}
+
+.tax-row{display:grid;grid-template-columns:1fr 90px;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);}
+.tax-row:last-child{border-bottom:none;}
+.tax-row label{font-size:13.5px;font-weight:700;color:var(--ink);}
+.tax-input-wrap{position:relative;}
+.tax-input-wrap input{width:100%;padding:8px 24px 8px 10px;font-size:13.5px;border-radius:7px;border:1.5px solid var(--line);font-family:'Nunito',sans-serif;text-align:right;}
+.tax-input-wrap input:focus{outline:none;border-color:var(--purple);}
+.tax-input-wrap span{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:12.5px;color:var(--ink-soft);font-weight:700;pointer-events:none;}
+
+.save-config-btn{width:100%;background:var(--purple-dark);color:#fff;border:none;padding:13px;font-size:14.5px;font-weight:800;border-radius:var(--radius-md);cursor:pointer;font-family:'Nunito',sans-serif;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:1.25rem;transition:background .15s;}
+.save-config-btn:hover{background:var(--purple);}
+.save-config-btn svg{width:16px;height:16px;}
+
+.neto-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0 2px;}
+.neto-label{font-size:12px;color:var(--ink-soft);font-weight:600;}
+.neto-val{font-size:13px;color:var(--mint-dark);font-weight:800;}
+
+.banner-preview-wrap{position:relative;border-radius:var(--radius-md);overflow:hidden;margin-bottom:1rem;}
+.banner-preview-wrap img{width:100%;height:120px;object-fit:cover;display:block;}
+.banner-edit-btn{position:absolute;bottom:8px;right:8px;background:rgba(42,37,54,0.7);color:#fff;border:none;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:'Nunito',sans-serif;}
+.banner-edit-btn svg{width:13px;height:13px;}
+
+::-webkit-scrollbar{width:8px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px;}
+
+@media(max-width:540px){
+  .header{flex-wrap:wrap;}
+  .header-right{margin-left:0;text-align:left;}
+  .metric-grid{grid-template-columns:1fr;}
+  .metric-grid.cols-4{grid-template-columns:repeat(2,1fr);}
+  .quarter-grid{grid-template-columns:repeat(2,1fr);}
+  .navtab span{display:none;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="header" id="header-banner">
+    <img id="header-logo-img" class="brand-mark" style="display:none;border-radius:50%;object-fit:cover;" alt="Logo del local">
+    <svg class="brand-mark" id="header-logo-default" viewBox="0 0 68 68" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="34" cy="34" r="34" fill="#BCE3DE"/>
+      <path d="M34,0 A34,34 0 0,1 68,34" fill="#BCE3DE"/>
+      <path d="M68,34 A34,34 0 0,1 51,62.7" fill="#FFF0B3"/>
+      <path d="M51,62.7 A34,34 0 0,1 17,62.7" fill="#F7D5C4"/>
+      <path d="M17,62.7 A34,34 0 0,1 0,34" fill="#F4A896"/>
+      <path d="M0,34 A34,34 0 0,1 34,0" fill="#8F83B9"/>
+      <circle cx="34" cy="34" r="30" fill="white"/>
+      <circle cx="34" cy="34" r="28" fill="#8F83B9"/>
+      <circle cx="34" cy="34" r="26" fill="none" stroke="white" stroke-width="1.2"/>
+      <path id="at" d="M 8,34 A 26,26 0 0,1 60,34" fill="none"/>
+      <text font-family="Arial,sans-serif" font-size="6.8" font-weight="800" fill="white" letter-spacing="1.8"><textPath href="#at" startOffset="50%" text-anchor="middle">JUGUETERÍA</textPath></text>
+      <path id="ab" d="M 8,34 A 26,26 0 0,0 60,34" fill="none"/>
+      <text font-family="Arial,sans-serif" font-size="6.8" font-weight="800" fill="white" letter-spacing="1.8"><textPath href="#ab" startOffset="50%" text-anchor="middle">DIDÁCTICA</textPath></text>
+      <text x="34" y="30" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="white">CREAR</text>
+      <text x="34" y="46" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="white">Y JUGAR</text>
+      <polygon points="13,34 14.2,31.8 16.4,34 14.2,36.2" fill="white" opacity="0.9"/>
+      <polygon points="55,34 56.2,31.8 58.4,34 56.2,36.2" fill="white" opacity="0.9"/>
+    </svg>
+    <div class="header-text">
+      <h1 id="header-title">Crear y Jugar</h1>
+      <p>Gestión diaria del local</p>
+    </div>
+    <div class="header-right">
+      <div class="header-badge">HOY</div>
+      <div class="header-clock" id="header-date"></div>
+      <div id="connection-badge" style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px;font-weight:600;">● Offline</div>
+    </div>
+  </div>
+
+  <div class="topnav">
+    <button class="navtab active" onclick="switchView('venta',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+      <span>Venta</span>
+    </button>
+    <button class="navtab" onclick="switchView('dashboard',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+      <span>Dashboard</span>
+    </button>
+    <button class="navtab" onclick="switchView('estados',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <span>Estados</span>
+    </button>
+    <button class="navtab" onclick="switchView('salud',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      <span>Salud</span>
+    </button>
+    <button class="navtab" onclick="switchView('historial',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Historial</span>
+    </button>
+    <button class="navtab" onclick="switchView('proveedores',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      <span>Proveedores</span>
+    </button>
+    <button class="navtab" onclick="switchView('config',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Config</span>
+    </button>
+  </div>
+
+  <!-- VISTA VENTA -->
+  <div class="view active" id="view-venta">
+    <div class="card">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-input" placeholder="Buscar producto por nombre, categoría o marca..." oninput="renderResults()">
+      </div>
+      <div class="results" id="results"></div>
+      <div class="section-label">Carrito</div>
+      <div class="cart-items" id="cart-items"></div>
+      <div class="summary-row">
+        <span style="font-size:13.5px;color:var(--ink-soft);font-weight:600;">Descuento</span>
+        <input type="text" id="descuento-input" placeholder="0%" oninput="renderCart()">
+      </div>
+      <div class="total-row">
+        <span class="total-label">Total</span>
+        <span class="total-val" id="total-val">$0</span>
+      </div>
+      <div class="neto-row" id="neto-row" style="display:none;">
+        <span class="neto-label">Neto estimado (descontando impuesto del medio de pago)</span>
+        <span class="neto-val" id="neto-val">$0</span>
+      </div>
+      <div class="section-label">Medio de pago</div>
+      <div class="pay-grid" id="pay-grid">
+        <button class="pay-btn" data-pay="Efectivo" onclick="selectPay(this)">Efectivo</button>
+        <button class="pay-btn" data-pay="Mercado Pago" onclick="selectPay(this)">M. Pago</button>
+        <button class="pay-btn" data-pay="Transferencia" onclick="selectPay(this)">Transferencia</button>
+        <button class="pay-btn" data-pay="Debito" onclick="selectPay(this)">Débito</button>
+        <button class="pay-btn" data-pay="Credito" onclick="selectPay(this)">Crédito</button>
+        <button class="pay-btn" data-pay="Otro" onclick="selectPay(this)">Otro</button>
+      </div>
+      <button class="confirm-btn" id="confirm-btn" onclick="confirmarVenta()" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        Confirmar venta
+      </button>
+    </div>
+  </div>
+
+  <!-- VISTA DASHBOARD -->
+  <div class="view" id="view-dashboard">
+    <div class="period-toggle" id="dash-period-toggle">
+      <button class="period-btn active" data-period="30" onclick="setDashPeriod(this)">30 días</button>
+      <button class="period-btn" data-period="90" onclick="setDashPeriod(this)">90 días</button>
+      <button class="period-btn" data-period="365" onclick="setDashPeriod(this)">12 meses</button>
+      <button class="period-btn" data-period="all" onclick="setDashPeriod(this)">Todo</button>
+    </div>
+
+    <div class="metric-grid cols-4" id="dash-metric-grid"></div>
+
+    <div class="card">
+      <div class="section-title">Ingresos vs egresos</div>
+      <div class="legend-row" id="ie-legend"></div>
+      <div class="chart-wrap" style="height:260px;">
+        <canvas id="chartIngresosEgresos" role="img" aria-label="Gráfico de ingresos y egresos en el tiempo"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Ventas por categoría</div>
+      <div class="chart-wrap" style="height:280px;">
+        <canvas id="chartCategorias" role="img" aria-label="Gráfico de barras de ventas por categoría de producto"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Medios de pago</div>
+      <div class="legend-row" id="pay-legend"></div>
+      <div class="chart-wrap" style="height:220px;">
+        <canvas id="chartMediosPago" role="img" aria-label="Gráfico de torta de distribución por medio de pago"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Top 10 productos</div>
+      <div id="top-products"></div>
+    </div>
+  </div>
+
+  <!-- VISTA ESTADOS CONTABLES -->
+  <div class="view" id="view-estados">
+    <div class="period-toggle">
+      <button class="period-btn active" data-mode="trimestral" onclick="setEstadoMode(this)">Trimestral</button>
+      <button class="period-btn" data-mode="anual" onclick="setEstadoMode(this)">Anual</button>
+    </div>
+
+    <div id="estados-year-select" class="filter-row"></div>
+    <div id="estados-quarter-grid" class="quarter-grid"></div>
+
+    <div class="card">
+      <div class="section-title" id="estado-titulo">Estado de resultados</div>
+      <table class="statement-table" id="estado-tabla"></table>
+    </div>
+
+    <div class="card" style="margin-top:1.25rem;">
+      <div class="section-title">Desglose de egresos por categoría</div>
+      <div id="estado-egresos-cat"></div>
+    </div>
+
+    <p style="font-size:12px;color:var(--ink-soft);margin-top:1rem;line-height:1.6;">
+      Cierre fiscal asumido: 31 de diciembre. Los trimestres se calculan como Ene–Mar, Abr–Jun, Jul–Sep y Oct–Dic de cada año calendario.
+    </p>
+  </div>
+
+  <!-- VISTA SALUD FINANCIERA -->
+  <div class="view" id="view-salud">
+    <div class="section-title" style="margin-top:0;">Hoy</div>
+    <div id="salud-hoy"></div>
+
+    <div class="section-title">Esta semana</div>
+    <div id="salud-semana"></div>
+
+    <div class="section-title">Este mes</div>
+    <div id="salud-mes"></div>
+
+    <p style="font-size:12px;color:var(--ink-soft);margin-top:1.25rem;line-height:1.6;">
+      Estas lecturas se calculan automáticamente comparando cada período con el anterior equivalente (hoy vs. ayer, esta semana vs. la semana pasada, este mes vs. el mes pasado). Es un análisis orientativo, no reemplaza una revisión contable.
+    </p>
+  </div>
+
+  <!-- VISTA HISTORIAL -->
+  <div class="view" id="view-historial">
+    <div class="filter-row">
+      <button class="filter-chip active" data-filter="todos" onclick="setHistFilter(this)">Todos</button>
+      <button class="filter-chip" data-filter="hoy" onclick="setHistFilter(this)">Hoy</button>
+      <button class="filter-chip" data-filter="semana" onclick="setHistFilter(this)">Esta semana</button>
+    </div>
+    <div class="card"><div id="history-list"></div></div>
+  </div>
+
+  <!-- VISTA PROVEEDORES (placeholder) -->
+  <div class="view" id="view-proveedores">
+    <div class="placeholder-card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      <div class="ph-title">Todavía no hay listas de proveedores cargadas</div>
+      <p>Cuando compartas las listas de proveedores y la lista de público, esta sección va a mostrar sugerencias de compra, precio público sugerido y análisis de márgenes por producto.</p>
+    </div>
+  </div>
+
+  <!-- VISTA CONFIGURACIÓN -->
+  <div class="view" id="view-config">
+
+    <div class="card">
+      <div class="section-title" style="margin-top:0;">Conexión al servidor</div>
+      <p style="font-size:13px;color:var(--ink-soft);margin-bottom:1rem;line-height:1.5;">Pegá la URL pública de tu backend en Railway. Esto permite sincronizar los datos entre todos los dispositivos.</p>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="backend-url-input" placeholder="https://tu-app.railway.app" style="flex:1;padding:10px 12px;font-size:14px;border-radius:var(--radius-md);border:1.5px solid var(--line);">
+        <button onclick="connectBackend()" style="padding:10px 16px;background:var(--purple-dark);color:#fff;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;">Conectar</button>
+      </div>
+      <p style="font-size:12px;color:var(--ink-soft);margin-top:8px;" id="backend-status">Sin conexión configurada</p>
+    </div>
+
+      <p class="section-label">Logo</p>
+      <div class="upload-tile" onclick="document.getElementById('logo-input').click()" style="margin-bottom:1.25rem;">
+        <input type="file" id="logo-input" accept="image/*" onchange="handleLogoUpload(this)">
+        <img id="logo-preview" class="upload-preview-logo" style="display:none;" alt="Vista previa del logo">
+        <svg id="logo-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <div class="upload-tile-label" id="logo-upload-label">Subir logo del local</div>
+        <div class="upload-tile-sub">Se muestra como círculo en el encabezado</div>
+      </div>
+
+      <p class="section-label">Banner del encabezado</p>
+      <div class="upload-tile" onclick="document.getElementById('banner-input').click()">
+        <input type="file" id="banner-input" accept="image/*" onchange="handleBannerUpload(this)">
+        <img id="banner-preview" class="upload-preview-banner" style="display:none;" alt="Vista previa del banner">
+        <svg id="banner-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <div class="upload-tile-label" id="banner-upload-label">Subir imagen de fondo</div>
+        <div class="upload-tile-sub">Se muestra detrás del logo en el encabezado</div>
+      </div>
+
+      <div class="form-row" style="margin-top:1.25rem;border-top:1.5px solid var(--line);padding-top:1rem;">
+        <label>Nombre del local</label>
+        <input type="text" id="config-nombre" style="text-align:left;" placeholder="Crear y Jugar">
+      </div>
+
+      <button class="save-config-btn" onclick="saveIdentidad()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Guardar identidad
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="section-title" style="margin-top:0;">Costos fijos mensuales</div>
+      <p style="font-size:13px;color:var(--ink-soft);margin-bottom:1rem;line-height:1.5;">Se repiten automáticamente todos los meses hasta que los modifiques. Se incluyen en el Dashboard y en los Estados Contables como egresos del mes correspondiente.</p>
+      <div id="fixed-costs-form"></div>
+      <button class="save-config-btn" onclick="saveFixedCosts()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Guardar costos fijos
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="section-title" style="margin-top:0;">Impuestos por medio de pago</div>
+      <p style="font-size:13px;color:var(--ink-soft);margin-bottom:1rem;line-height:1.5;">Solo a modo informativo: no descuenta nada del total cobrado, pero muestra el neto estimado al cargar cada venta.</p>
+      <div id="tax-form"></div>
+      <button class="save-config-btn" onclick="saveTaxes()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Guardar impuestos
+      </button>
+    </div>
+
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CATALOG = [{"id": "PRD-0001", "nombre": "Pelota Montessori", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 17350}, {"id": "PRD-0002", "nombre": "Títere de dedo", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 9900}, {"id": "PRD-0003", "nombre": "Bowling grande", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 48600}, {"id": "PRD-0004", "nombre": "Títere de dedo con resorte", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 2300}, {"id": "PRD-0005", "nombre": "Bloques Lubloks", "categoria": "Construcción y bloques", "marca": "Lubloks", "precio": 47712}, {"id": "PRD-0006", "nombre": "Lubloks equilibrio", "categoria": "Construcción y bloques", "marca": "Lubloks", "precio": 30000}, {"id": "PRD-0007", "nombre": "Pelota Montessori grande", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 30000}, {"id": "PRD-0008", "nombre": "We Art sonajero", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 36000}, {"id": "PRD-0009", "nombre": "Little Twister", "categoria": "Encastre / Motricidad fina", "marca": "Little Twister", "precio": 36000}, {"id": "PRD-0010", "nombre": "Arco mini", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Serabot", "precio": 32681}, {"id": "PRD-0011", "nombre": "Libro con sonido (barco)", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 27200}, {"id": "PRD-0012", "nombre": "Hospital Mis Calles", "categoria": "Juego simbólico", "marca": "Mis Calles", "precio": 13940}, {"id": "PRD-0013", "nombre": "Granja Lubloks", "categoria": "Construcción y bloques", "marca": "Lubloks", "precio": 42680}, {"id": "PRD-0014", "nombre": "Pastillas de colores", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 11979}, {"id": "PRD-0015", "nombre": "Oveja de encastre", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "precio": 5100}, {"id": "PRD-0016", "nombre": "Equilibrista", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 5100}, {"id": "PRD-0017", "nombre": "Bath boat", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 16350}, {"id": "PRD-0018", "nombre": "Títere de mano", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 18990}, {"id": "PRD-0019", "nombre": "Kit inicial Mis Calles", "categoria": "Juego simbólico", "marca": "Mis Calles", "precio": 27480}, {"id": "PRD-0020", "nombre": "Paraguas (juguete)", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 30000}, {"id": "PRD-0021", "nombre": "Auto de madera", "categoria": "Vehículos y arrastre", "marca": "Genérico", "precio": 10000}, {"id": "PRD-0022", "nombre": "Encastres Mágicos", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "precio": 16200}, {"id": "PRD-0023", "nombre": "Tubix chico", "categoria": "Construcción y bloques", "marca": "Genérico", "precio": 28750}, {"id": "PRD-0024", "nombre": "Pelotitas sensoriales", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 22726}, {"id": "PRD-0025", "nombre": "Disfraz de magia", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 12650}, {"id": "PRD-0026", "nombre": "LCD (pizarra dibujo)", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 10884}, {"id": "PRD-0027", "nombre": "Mochila denim", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 9135}, {"id": "PRD-0028", "nombre": "Pretty Girls", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 8562}, {"id": "PRD-0029", "nombre": "Autito", "categoria": "Vehículos y arrastre", "marca": "Genérico", "precio": 6268}, {"id": "PRD-0030", "nombre": "Paso a nivel Mis Calles", "categoria": "Juego simbólico", "marca": "Mis Calles", "precio": 20500}, {"id": "PRD-0031", "nombre": "Dados", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 5200}, {"id": "PRD-0032", "nombre": "Rakupets", "categoria": "Peluches y muñecos", "marca": "Rakupets", "precio": 23661}, {"id": "PRD-0033", "nombre": "Banditas mágicas", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 12175}, {"id": "PRD-0034", "nombre": "Stationery", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 9350}, {"id": "PRD-0035", "nombre": "Casita con familia", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 44000}, {"id": "PRD-0036", "nombre": "Bowling animalitos", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 25300}, {"id": "PRD-0037", "nombre": "Encastre cono", "categoria": "Encastre / Motricidad fina", "marca": "Little Twister", "precio": 25000}, {"id": "PRD-0038", "nombre": "Tubix grande", "categoria": "Construcción y bloques", "marca": "Genérico", "precio": 33950}, {"id": "PRD-0039", "nombre": "Memoria (juego)", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 20900}, {"id": "PRD-0040", "nombre": "Rakupets caja x5", "categoria": "Peluches y muñecos", "marca": "Rakupets", "precio": 71200}, {"id": "PRD-0041", "nombre": "Juego de pesca de maderitas", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "precio": 56000}, {"id": "PRD-0042", "nombre": "Set equilibrio", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 35200}, {"id": "PRD-0043", "nombre": "Libro animales del mar", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 35200}, {"id": "PRD-0044", "nombre": "Bloques plástico grandes", "categoria": "Construcción y bloques", "marca": "Genérico", "precio": 52650}, {"id": "PRD-0045", "nombre": "Qubic grande", "categoria": "Rompecabezas", "marca": "Genérico", "precio": 23500}, {"id": "PRD-0046", "nombre": "Masas (set 3)", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 13267}, {"id": "PRD-0047", "nombre": "Ta-te-ti caja", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 6350}, {"id": "PRD-0048", "nombre": "Cubo Rubik", "categoria": "Rompecabezas", "marca": "Genérico", "precio": 6350}, {"id": "PRD-0049", "nombre": "Balancín", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 74868}, {"id": "PRD-0050", "nombre": "Bloques grandes de madera", "categoria": "Construcción y bloques", "marca": "Genérico", "precio": 20000}, {"id": "PRD-0051", "nombre": "Carrito", "categoria": "Vehículos y arrastre", "marca": "Genérico", "precio": 20000}, {"id": "PRD-0052", "nombre": "Metegol chico", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 27200}, {"id": "PRD-0053", "nombre": "Gimnasio Océano", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 33600}, {"id": "PRD-0054", "nombre": "Bombo", "categoria": "Música e instrumentos", "marca": "Genérico", "precio": 37613}, {"id": "PRD-0055", "nombre": "Disfraz de dino", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 22427}, {"id": "PRD-0056", "nombre": "Aprendo a escribir mayúsculas", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 11653}, {"id": "PRD-0057", "nombre": "Luminias", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 11260}, {"id": "PRD-0058", "nombre": "Caja Clap caritas", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 32800}, {"id": "PRD-0059", "nombre": "Sobre pastillas arrugadedos", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 2100}, {"id": "PRD-0060", "nombre": "Sobre pastillas", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 3480}, {"id": "PRD-0061", "nombre": "Camión tres soles", "categoria": "Vehículos y arrastre", "marca": "Genérico", "precio": 44800}, {"id": "PRD-0062", "nombre": "Osito", "categoria": "Peluches y muñecos", "marca": "Plan Toys", "precio": 77600}, {"id": "PRD-0063", "nombre": "Espuma (juego de baño)", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 8800}, {"id": "PRD-0064", "nombre": "Circuito de bolitas", "categoria": "Construcción y bloques", "marca": "Genérico", "precio": 38639}, {"id": "PRD-0065", "nombre": "Rakupets mediano", "categoria": "Peluches y muñecos", "marca": "Rakupets", "precio": 26978}, {"id": "PRD-0066", "nombre": "Bolso poly", "categoria": "Otros / varios", "marca": "Genérico", "precio": 18532}, {"id": "PRD-0067", "nombre": "Viaje a la luna (juego)", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 20350}, {"id": "PRD-0068", "nombre": "Auto con témperas para colorear", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 20350}, {"id": "PRD-0069", "nombre": "Cartas cuerpo humano y espacio", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 20600}, {"id": "PRD-0070", "nombre": "Prono piso (rompecabezas de piso)", "categoria": "Rompecabezas", "marca": "Genérico", "precio": 47200}, {"id": "PRD-0071", "nombre": "Pizarra Banquito", "categoria": "Arte y manualidades", "marca": "Banquito", "precio": 14127}, {"id": "PRD-0072", "nombre": "Rompecabezas de piso", "categoria": "Rompecabezas", "marca": "Genérico", "precio": 25600}, {"id": "PRD-0073", "nombre": "Libro 50 juegos", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 36480}, {"id": "PRD-0074", "nombre": "Libro doméstico", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 20300}, {"id": "PRD-0075", "nombre": "Casita bomberos / castillo pintar / set Mis Calles", "categoria": "Juego simbólico", "marca": "Mis Calles", "precio": 0}, {"id": "PRD-0076", "nombre": "Venta con dos tarjetas (productos sin detallar)", "categoria": "Otros / varios", "marca": "Genérico", "precio": 59636}, {"id": "PRD-0077", "nombre": "Química divertida", "categoria": "Ciencia y experimentos", "marca": "Genérico", "precio": 31638}, {"id": "PRD-0078", "nombre": "Robótica Galileo", "categoria": "Ciencia y experimentos", "marca": "Galileo", "precio": 31638}, {"id": "PRD-0079", "nombre": "Librito", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 10038}, {"id": "PRD-0080", "nombre": "Stickers", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 4194}, {"id": "PRD-0081", "nombre": "Libro cuerpo humano 3D", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 26880}, {"id": "PRD-0082", "nombre": "Imanes destellos animalitos", "categoria": "Construcción y bloques", "marca": "Genérico", "precio": 12200}, {"id": "PRD-0083", "nombre": "Jacaranda x100", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 18700}, {"id": "PRD-0084", "nombre": "Marcadores", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 17025}, {"id": "PRD-0085", "nombre": "Rompecabezas de madera", "categoria": "Rompecabezas", "marca": "Genérico", "precio": 27210}, {"id": "PRD-0086", "nombre": "Laboratorio portátil", "categoria": "Ciencia y experimentos", "marca": "Genérico", "precio": 23300}, {"id": "PRD-0087", "nombre": "Cartas", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 10867}, {"id": "PRD-0088", "nombre": "Qubic chico", "categoria": "Rompecabezas", "marca": "Genérico", "precio": 5475}, {"id": "PRD-0089", "nombre": "Zapa Serabot", "categoria": "Otros / varios", "marca": "Serabot", "precio": 5475}, {"id": "PRD-0090", "nombre": "W-Game yoyo", "categoria": "Otros / varios", "marca": "Genérico", "precio": 5475}, {"id": "PRD-0091", "nombre": "Scratch card chiquito", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 5475}, {"id": "PRD-0092", "nombre": "Borrador", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 3200}, {"id": "PRD-0093", "nombre": "Rakupets chico", "categoria": "Peluches y muñecos", "marca": "Rakupets", "precio": 22975}, {"id": "PRD-0094", "nombre": "Alfabeto de bichos", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 20500}, {"id": "PRD-0095", "nombre": "Rompecabezas magnético Clap", "categoria": "Rompecabezas", "marca": "Genérico", "precio": 20500}, {"id": "PRD-0096", "nombre": "Dinosaurios (figura)", "categoria": "Peluches y muñecos", "marca": "Genérico", "precio": 20800}, {"id": "PRD-0097", "nombre": "Marcadores (seña)", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 20000}, {"id": "PRD-0098", "nombre": "Palitos para xilofón", "categoria": "Música e instrumentos", "marca": "Genérico", "precio": 4853}, {"id": "PRD-0099", "nombre": "Palitos de madera sin bolita (regalo)", "categoria": "Música e instrumentos", "marca": "Genérico", "precio": 4853}, {"id": "PRD-0100", "nombre": "Pelota Montessori mediana", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 18800}, {"id": "PRD-0101", "nombre": "Set brilla en la oscuridad", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 3650}, {"id": "PRD-0102", "nombre": "Pizarrón Banquito", "categoria": "Arte y manualidades", "marca": "Banquito", "precio": 17800}, {"id": "PRD-0103", "nombre": "Capa de princesa", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 17800}, {"id": "PRD-0104", "nombre": "Caballito mecedor", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 70000}, {"id": "PRD-0105", "nombre": "Pizarra LED", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 8100}, {"id": "PRD-0106", "nombre": "Lubloks granja", "categoria": "Construcción y bloques", "marca": "Lubloks", "precio": 36600}, {"id": "PRD-0107", "nombre": "Bowling chico", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 29380}, {"id": "PRD-0108", "nombre": "Pizarra carro", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 44840}, {"id": "PRD-0109", "nombre": "Burbujero", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 3500}, {"id": "PRD-0110", "nombre": "Kit chico watergame Mis Calles", "categoria": "Juego simbólico", "marca": "Mis Calles", "precio": 35800}, {"id": "PRD-0111", "nombre": "Muñeca que abraza", "categoria": "Peluches y muñecos", "marca": "Genérico", "precio": 32000}, {"id": "PRD-0112", "nombre": "Cubo Lucerito", "categoria": "Construcción y bloques", "marca": "Genérico", "precio": 14633}, {"id": "PRD-0113", "nombre": "Imanes Pedro", "categoria": "Construcción y bloques", "marca": "Genérico", "precio": 14633}, {"id": "PRD-0114", "nombre": "Pelota chiquita mundial", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 9408}, {"id": "PRD-0115", "nombre": "Kit espacio destellos", "categoria": "Ciencia y experimentos", "marca": "Genérico", "precio": 12600}, {"id": "PRD-0116", "nombre": "Autito Tutu", "categoria": "Vehículos y arrastre", "marca": "Genérico", "precio": 7800}, {"id": "PRD-0117", "nombre": "Trencity Ecotown", "categoria": "Vehículos y arrastre", "marca": "Trencity", "precio": 53700}, {"id": "PRD-0118", "nombre": "Perro Bubba", "categoria": "Peluches y muñecos", "marca": "Genérico", "precio": 23920}, {"id": "PRD-0119", "nombre": "Imanes destellos", "categoria": "Construcción y bloques", "marca": "Genérico", "precio": 8200}, {"id": "PRD-0120", "nombre": "Hamaca balancín", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 75600}, {"id": "PRD-0121", "nombre": "Labubu hojitas negras para pintar", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 1900}, {"id": "PRD-0122", "nombre": "Encaje relieve", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "precio": 8100}, {"id": "PRD-0123", "nombre": "Masa pequeña", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 8100}, {"id": "PRD-0124", "nombre": "Encastre aros", "categoria": "Encastre / Motricidad fina", "marca": "Little Twister", "precio": 22000}, {"id": "PRD-0125", "nombre": "Encastre con volumen", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "precio": 9870}, {"id": "PRD-0126", "nombre": "Cartas ingeniosamente 6/7", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 9850}, {"id": "PRD-0127", "nombre": "Escribo con stickers", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 9850}, {"id": "PRD-0128", "nombre": "Gimnasio pequeña compañía", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 33600}, {"id": "PRD-0129", "nombre": "Libro rompecabezas mar", "categoria": "Rompecabezas", "marca": "Genérico", "precio": 20800}, {"id": "PRD-0130", "nombre": "Pelota Montessori chica", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 16400}, {"id": "PRD-0131", "nombre": "Palabras cruzadas", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 7000}, {"id": "PRD-0132", "nombre": "Observatorio doble", "categoria": "Ciencia y experimentos", "marca": "Genérico", "precio": 31950}, {"id": "PRD-0133", "nombre": "Delantal chef", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 20540}, {"id": "PRD-0134", "nombre": "Binocular de goma", "categoria": "Otros / varios", "marca": "Genérico", "precio": 34720}, {"id": "PRD-0135", "nombre": "Trencity Avenida Bosque", "categoria": "Vehículos y arrastre", "marca": "Trencity", "precio": 34720}, {"id": "PRD-0136", "nombre": "Medidor", "categoria": "Ciencia y experimentos", "marca": "Genérico", "precio": 30760}, {"id": "PRD-0137", "nombre": "Rompecabezas circo", "categoria": "Rompecabezas", "marca": "Genérico", "precio": 11900}, {"id": "PRD-0138", "nombre": "Atrapasueños", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 9430}, {"id": "PRD-0139", "nombre": "Muñeca Natina", "categoria": "Peluches y muñecos", "marca": "Genérico", "precio": 34400}, {"id": "PRD-0140", "nombre": "Pelotita rebotina", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 3900}, {"id": "PRD-0141", "nombre": "Geola", "categoria": "Otros / varios", "marca": "Genérico", "precio": 8900}, {"id": "PRD-0142", "nombre": "Capa superhéroe", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 11675}, {"id": "PRD-0143", "nombre": "Venta varios (sin detalle de producto)", "categoria": "Otros / varios", "marca": "Genérico", "precio": 105964}, {"id": "PRD-0144", "nombre": "Puntero láser", "categoria": "Otros / varios", "marca": "Genérico", "precio": 11950}, {"id": "PRD-0145", "nombre": "Arca de Noé", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 63900}, {"id": "PRD-0146", "nombre": "Acordeón concertina", "categoria": "Música e instrumentos", "marca": "Plan Toys", "precio": 42092}, {"id": "PRD-0147", "nombre": "Laboratorio de colores", "categoria": "Ciencia y experimentos", "marca": "Genérico", "precio": 18700}, {"id": "PRD-0148", "nombre": "Casita Mis Calles", "categoria": "Juego simbólico", "marca": "Mis Calles", "precio": 22300}, {"id": "PRD-0149", "nombre": "Puzzle piso familia", "categoria": "Rompecabezas", "marca": "Genérico", "precio": 25287}, {"id": "PRD-0150", "nombre": "Libro camiones con textura", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 12750}, {"id": "PRD-0151", "nombre": "Cartas escribo cursiva", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 19750}, {"id": "PRD-0152", "nombre": "Masas (set)", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 2800}, {"id": "PRD-0153", "nombre": "Juego de mate (madera)", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 47600}, {"id": "PRD-0154", "nombre": "Pelotitas texturadas", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 18000}, {"id": "PRD-0155", "nombre": "Las familias (juego)", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 16940}, {"id": "PRD-0156", "nombre": "Trencity Bomby", "categoria": "Vehículos y arrastre", "marca": "Trencity", "precio": 78320}, {"id": "PRD-0157", "nombre": "Guitarra mediana", "categoria": "Música e instrumentos", "marca": "Genérico", "precio": 11633}, {"id": "PRD-0158", "nombre": "Auto Torky", "categoria": "Vehículos y arrastre", "marca": "Genérico", "precio": 11633}, {"id": "PRD-0159", "nombre": "Melvin Trencity", "categoria": "Vehículos y arrastre", "marca": "Trencity", "precio": 11633}, {"id": "PRD-0160", "nombre": "Lubloks", "categoria": "Construcción y bloques", "marca": "Lubloks", "precio": 38300}, {"id": "PRD-0161", "nombre": "Juego de Bowling", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 19500}, {"id": "PRD-0162", "nombre": "Las letras Banquito", "categoria": "Papelería didáctica", "marca": "Banquito", "precio": 17500}, {"id": "PRD-0163", "nombre": "Arca (juguete)", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 66000}, {"id": "PRD-0164", "nombre": "Bowling pequeño", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 66000}, {"id": "PRD-0165", "nombre": "Pelota Montessori arrastre", "categoria": "Vehículos y arrastre", "marca": "Genérico", "precio": 66000}, {"id": "PRD-0166", "nombre": "Facebrillo libro jardines", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 22850}, {"id": "PRD-0167", "nombre": "Libro unicornio", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 22850}, {"id": "PRD-0168", "nombre": "Superhéroe colección", "categoria": "Peluches y muñecos", "marca": "Genérico", "precio": 20000}, {"id": "PRD-0169", "nombre": "Libro con puzzle en cada hoja", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 20720}, {"id": "PRD-0170", "nombre": "Juego de donas y hamburguesa", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 30000}, {"id": "PRD-0171", "nombre": "Sistema Solar (juego)", "categoria": "Ciencia y experimentos", "marca": "Genérico", "precio": 36000}, {"id": "PRD-0172", "nombre": "Personitas imán Clap", "categoria": "Construcción y bloques", "marca": "Genérico", "precio": 14600}, {"id": "PRD-0173", "nombre": "Daki ositos", "categoria": "Peluches y muñecos", "marca": "Genérico", "precio": 16975}, {"id": "PRD-0174", "nombre": "Encaje relieve transporte", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "precio": 13422}, {"id": "PRD-0175", "nombre": "Libro 50 juegos de animales", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 18300}, {"id": "PRD-0176", "nombre": "Cochecito Tutu", "categoria": "Vehículos y arrastre", "marca": "Genérico", "precio": 7800}, {"id": "PRD-0177", "nombre": "Caja pastillas", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 12676}, {"id": "PRD-0178", "nombre": "Clatter", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Plan Toys", "precio": 35000}, {"id": "PRD-0179", "nombre": "Cocodrilo de colores", "categoria": "Vehículos y arrastre", "marca": "Plan Toys", "precio": 45500}, {"id": "PRD-0180", "nombre": "Memoria Banquito", "categoria": "Juegos de mesa / cartas", "marca": "Banquito", "precio": 16800}, {"id": "PRD-0181", "nombre": "Caja pastillas agua", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 20500}, {"id": "PRD-0182", "nombre": "Metegol", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 60800}, {"id": "PRD-0183", "nombre": "Librito PVC", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 12500}, {"id": "PRD-0184", "nombre": "Celestin", "categoria": "Otros / varios", "marca": "Genérico", "precio": 18000}, {"id": "PRD-0185", "nombre": "Puzzle Banquito 8 piezas tortuga", "categoria": "Rompecabezas", "marca": "Banquito", "precio": 8200}, {"id": "PRD-0186", "nombre": "Piloto (juguete)", "categoria": "Vehículos y arrastre", "marca": "Genérico", "precio": 11000}, {"id": "PRD-0187", "nombre": "Librito pinto y sumo", "categoria": "Libros y cuentos", "marca": "Genérico", "precio": 11000}, {"id": "PRD-0188", "nombre": "Pista de reciclaje Trencity", "categoria": "Vehículos y arrastre", "marca": "Trencity", "precio": 45500}, {"id": "PRD-0189", "nombre": "Avión de madera", "categoria": "Vehículos y arrastre", "marca": "Genérico", "precio": 22300}, {"id": "PRD-0190", "nombre": "Puzzle Banquito 4 piezas", "categoria": "Rompecabezas", "marca": "Banquito", "precio": 10780}, {"id": "PRD-0191", "nombre": "Pizarrón", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 107000}, {"id": "PRD-0192", "nombre": "Peluche pato", "categoria": "Peluches y muñecos", "marca": "Genérico", "precio": 11150}, {"id": "PRD-0193", "nombre": "Peluche mono", "categoria": "Peluches y muñecos", "marca": "Genérico", "precio": 11150}, {"id": "PRD-0194", "nombre": "Daki cod 802", "categoria": "Otros / varios", "marca": "Genérico", "precio": 17500}, {"id": "PRD-0195", "nombre": "Cartas Uno", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 2333}, {"id": "PRD-0196", "nombre": "Face Stickers", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 2333}, {"id": "PRD-0197", "nombre": "Guitarra", "categoria": "Música e instrumentos", "marca": "Genérico", "precio": 8500}, {"id": "PRD-0198", "nombre": "Puzzle doble Tancovich", "categoria": "Rompecabezas", "marca": "Tancovich", "precio": 73255}, {"id": "PRD-0199", "nombre": "Juego de Bowling chico", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 23000}, {"id": "PRD-0200", "nombre": "Rompecabezas Banquito 6 piezas", "categoria": "Rompecabezas", "marca": "Banquito", "precio": 10000}, {"id": "PRD-0201", "nombre": "Los Números (juego)", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 10000}, {"id": "PRD-0202", "nombre": "Cartas Uno Mundial", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 3900}, {"id": "PRD-0203", "nombre": "Las secuencias (juego)", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 23396}, {"id": "PRD-0204", "nombre": "Delantal", "categoria": "Juego simbólico", "marca": "Ecolekua", "precio": 16500}, {"id": "PRD-0205", "nombre": "Tambor", "categoria": "Música e instrumentos", "marca": "Plan Toys", "precio": 27000}, {"id": "PRD-0206", "nombre": "Banco de descarga maderitas", "categoria": "Construcción y bloques", "marca": "Genérico", "precio": 27000}, {"id": "PRD-0207", "nombre": "Rompecabezas largo ciudad", "categoria": "Rompecabezas", "marca": "Genérico", "precio": 26792}, {"id": "PRD-0208", "nombre": "Balance y equilibrio (juego)", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "precio": 38300}, {"id": "PRD-0209", "nombre": "Microscopio", "categoria": "Ciencia y experimentos", "marca": "Genérico", "precio": 36213}, {"id": "PRD-0210", "nombre": "La ciencia robótica", "categoria": "Ciencia y experimentos", "marca": "Genérico", "precio": 36213}, {"id": "PRD-0211", "nombre": "Planchas de stickers", "categoria": "Papelería didáctica", "marca": "Genérico", "precio": 36213}, {"id": "PRD-0212", "nombre": "Torta puzzle de madera", "categoria": "Rompecabezas", "marca": "Genérico", "precio": 19000}, {"id": "PRD-0213", "nombre": "Muñeca Natina y Moda", "categoria": "Peluches y muñecos", "marca": "Genérico", "precio": 37500}, {"id": "PRD-0214", "nombre": "Caja de arte Clap", "categoria": "Arte y manualidades", "marca": "Genérico", "precio": 33500}, {"id": "PRD-0215", "nombre": "Básquet", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Serabot", "precio": 51920}, {"id": "PRD-0216", "nombre": "Juguetes varios (sin detalle)", "categoria": "Otros / varios", "marca": "Genérico", "precio": 277000}, {"id": "PRD-0217", "nombre": "Caracol de arrastre", "categoria": "Vehículos y arrastre", "marca": "Genérico", "precio": 39600}, {"id": "PRD-0218", "nombre": "Detectives en acción (juego)", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "precio": 39800}, {"id": "PRD-0219", "nombre": "La ciencia del agua", "categoria": "Ciencia y experimentos", "marca": "Genérico", "precio": 33600}, {"id": "PRD-0220", "nombre": "Pato", "categoria": "Vehículos y arrastre", "marca": "Plan Toys", "precio": 41360}, {"id": "PRD-0221", "nombre": "Fashion Jewels", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 5733}, {"id": "PRD-0222", "nombre": "Look 49", "categoria": "Juego simbólico", "marca": "Genérico", "precio": 5733}, {"id": "PRD-0223", "nombre": "Zapatilla con cordones (didáctica)", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "precio": 5733}, {"id": "PRD-0224", "nombre": "Alligator", "categoria": "Vehículos y arrastre", "marca": "Plan Toys", "precio": 33000}, {"id": "PRD-0225", "nombre": "Wave Stacker", "categoria": "Construcción y bloques", "marca": "Plan Toys", "precio": 33000}, {"id": "PRD-0226", "nombre": "Alligator verde", "categoria": "Vehículos y arrastre", "marca": "Plan Toys", "precio": 39600}];
+const VENTAS_HISTORICAS = [{"id": "HIST-V-0", "fecha": "2026-03-02T00:00:00", "items": [{"producto_id": "PRD-0001", "nombre": "Pelota Montessori", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 15200.0}, {"producto_id": "PRD-0002", "nombre": "Títere de dedo", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 3, "precio_unitario": 5066.67}], "subtotal": 30400.0, "descuento_pct": 0, "total": 30400.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-1", "fecha": "2026-03-02T00:00:00", "items": [{"producto_id": "PRD-0003", "nombre": "Bowling grande", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 48600.0}], "subtotal": 48600.0, "descuento_pct": 0, "total": 48600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-2", "fecha": "2026-03-03T00:00:00", "items": [{"producto_id": "PRD-0002", "nombre": "Títere de dedo", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 2, "precio_unitario": 2300.0}], "subtotal": 4600.0, "descuento_pct": 0, "total": 4600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-3", "fecha": "2026-03-04T00:00:00", "items": [{"producto_id": "PRD-0004", "nombre": "Títere de dedo con resorte", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 2300.0}], "subtotal": 2300.0, "descuento_pct": 0, "total": 2300.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-4", "fecha": "2026-03-04T00:00:00", "items": [{"producto_id": "PRD-0005", "nombre": "Bloques Lubloks", "categoria": "Construcción y bloques", "marca": "Lubloks", "cantidad": 1, "precio_unitario": 39600.0}], "subtotal": 39600.0, "descuento_pct": 0, "total": 39600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-5", "fecha": "2026-03-05T00:00:00", "items": [{"producto_id": "PRD-0006", "nombre": "Lubloks equilibrio", "categoria": "Construcción y bloques", "marca": "Lubloks", "cantidad": 1, "precio_unitario": 30000.0}, {"producto_id": "PRD-0007", "nombre": "Pelota Montessori grande", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 30000.0}], "subtotal": 60000.0, "descuento_pct": 0, "total": 60000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-6", "fecha": "2026-03-05T00:00:00", "items": [{"producto_id": "PRD-0008", "nombre": "We Art sonajero", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 36000.0}, {"producto_id": "PRD-0009", "nombre": "Little Twister", "categoria": "Encastre / Motricidad fina", "marca": "Little Twister", "cantidad": 1, "precio_unitario": 36000.0}], "subtotal": 72000.0, "descuento_pct": 0, "total": 72000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-7", "fecha": "2026-03-05T00:00:00", "items": [{"producto_id": "PRD-0010", "nombre": "Arco mini", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Serabot", "cantidad": 1, "precio_unitario": 32680.56}], "subtotal": 32680.56, "descuento_pct": 0, "total": 32680.56, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-8", "fecha": "2026-03-05T00:00:00", "items": [{"producto_id": "PRD-0011", "nombre": "Libro con sonido (barco)", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 33600.0}], "subtotal": 33600.0, "descuento_pct": 0, "total": 33600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-9", "fecha": "2026-03-06T00:00:00", "items": [{"producto_id": "PRD-0012", "nombre": "Hospital Mis Calles", "categoria": "Juego simbólico", "marca": "Mis Calles", "cantidad": 1, "precio_unitario": 13940.0}], "subtotal": 13940.0, "descuento_pct": 0, "total": 13940.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-10", "fecha": "2026-03-06T00:00:00", "items": [{"producto_id": "PRD-0013", "nombre": "Granja Lubloks", "categoria": "Construcción y bloques", "marca": "Lubloks", "cantidad": 1, "precio_unitario": 42680.0}], "subtotal": 42680.0, "descuento_pct": 0, "total": 42680.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-11", "fecha": "2026-03-07T00:00:00", "items": [{"producto_id": "PRD-0014", "nombre": "Pastillas de colores", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12800.0}], "subtotal": 12800.0, "descuento_pct": 0, "total": 12800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-12", "fecha": "2026-03-07T00:00:00", "items": [{"producto_id": "PRD-0015", "nombre": "Oveja de encastre", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "cantidad": 1, "precio_unitario": 5100.0}, {"producto_id": "PRD-0016", "nombre": "Equilibrista", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 5100.0}], "subtotal": 10200.0, "descuento_pct": 0, "total": 10200.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-13", "fecha": "2026-03-09T00:00:00", "items": [{"producto_id": "PRD-0017", "nombre": "Bath boat", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 16350.0}, {"producto_id": "PRD-0018", "nombre": "Títere de mano", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 16350.0}], "subtotal": 32700.0, "descuento_pct": 0, "total": 32700.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-14", "fecha": "2026-03-09T00:00:00", "items": [{"producto_id": "PRD-0019", "nombre": "Kit inicial Mis Calles", "categoria": "Juego simbólico", "marca": "Mis Calles", "cantidad": 1, "precio_unitario": 27480.0}], "subtotal": 27480.0, "descuento_pct": 0, "total": 27480.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-15", "fecha": "2026-03-09T00:00:00", "items": [{"producto_id": "PRD-0020", "nombre": "Paraguas (juguete)", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 2, "precio_unitario": 15000.0}], "subtotal": 30000.0, "descuento_pct": 0, "total": 30000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-16", "fecha": "2026-03-09T00:00:00", "items": [{"producto_id": "PRD-0021", "nombre": "Auto de madera", "categoria": "Vehículos y arrastre", "marca": "Genérico", "cantidad": 2, "precio_unitario": 5000.0}], "subtotal": 10000.0, "descuento_pct": 0, "total": 10000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-17", "fecha": "2026-03-10T00:00:00", "items": [{"producto_id": "PRD-0018", "nombre": "Títere de mano", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9900.0}], "subtotal": 9900.0, "descuento_pct": 0, "total": 9900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-18", "fecha": "2026-03-10T00:00:00", "items": [{"producto_id": "PRD-0022", "nombre": "Encastres Mágicos", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "cantidad": 1, "precio_unitario": 17000.0}], "subtotal": 17000.0, "descuento_pct": 0, "total": 17000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-19", "fecha": "2026-03-10T00:00:00", "items": [{"producto_id": "PRD-0023", "nombre": "Tubix chico", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 2, "precio_unitario": 14375.0}, {"producto_id": "PRD-0024", "nombre": "Pelotitas sensoriales", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 28750.0}], "subtotal": 57500.0, "descuento_pct": 0, "total": 57500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-20", "fecha": "2026-03-10T00:00:00", "items": [{"producto_id": "PRD-0025", "nombre": "Disfraz de magia", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12650.0}, {"producto_id": "PRD-0026", "nombre": "LCD (pizarra dibujo)", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12650.0}], "subtotal": 25300.0, "descuento_pct": 0, "total": 25300.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-21", "fecha": "2026-03-10T00:00:00", "items": [{"producto_id": "PRD-0014", "nombre": "Pastillas de colores", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12800.0}], "subtotal": 12800.0, "descuento_pct": 0, "total": 12800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-22", "fecha": "2026-03-11T00:00:00", "items": [{"producto_id": "PRD-0027", "nombre": "Mochila denim", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9135.0}, {"producto_id": "PRD-0028", "nombre": "Pretty Girls", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9135.0}, {"producto_id": "PRD-0026", "nombre": "LCD (pizarra dibujo)", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9135.0}, {"producto_id": "PRD-0029", "nombre": "Autito", "categoria": "Vehículos y arrastre", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9135.0}], "subtotal": 36540.0, "descuento_pct": 0, "total": 36540.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-23", "fecha": "2026-03-11T00:00:00", "items": [{"producto_id": "PRD-0030", "nombre": "Paso a nivel Mis Calles", "categoria": "Juego simbólico", "marca": "Mis Calles", "cantidad": 1, "precio_unitario": 20500.0}], "subtotal": 20500.0, "descuento_pct": 0, "total": 20500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-24", "fecha": "2026-03-11T00:00:00", "items": [{"producto_id": "PRD-0031", "nombre": "Dados", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 5, "precio_unitario": 250.0}], "subtotal": 1250.0, "descuento_pct": 0, "total": 1250.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-25", "fecha": "2026-03-11T00:00:00", "items": [{"producto_id": "PRD-0032", "nombre": "Rakupets", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 2, "precio_unitario": 15000.0}], "subtotal": 30000.0, "descuento_pct": 0, "total": 30000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-26", "fecha": "2026-03-11T00:00:00", "items": [{"producto_id": "PRD-0033", "nombre": "Banditas mágicas", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9350.0}, {"producto_id": "PRD-0034", "nombre": "Stationery", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9350.0}], "subtotal": 18700.0, "descuento_pct": 0, "total": 18700.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-27", "fecha": "2026-03-12T00:00:00", "items": [{"producto_id": "PRD-0035", "nombre": "Casita con familia", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 44000.0}], "subtotal": 44000.0, "descuento_pct": 0, "total": 44000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-28", "fecha": "2026-03-12T00:00:00", "items": [{"producto_id": "PRD-0036", "nombre": "Bowling animalitos", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 25300.0}], "subtotal": 25300.0, "descuento_pct": 0, "total": 25300.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-29", "fecha": "2026-03-13T00:00:00", "items": [{"producto_id": "PRD-0037", "nombre": "Encastre cono", "categoria": "Encastre / Motricidad fina", "marca": "Little Twister", "cantidad": 1, "precio_unitario": 25000.0}], "subtotal": 25000.0, "descuento_pct": 0, "total": 25000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-30", "fecha": "2026-03-13T00:00:00", "items": [{"producto_id": "PRD-0032", "nombre": "Rakupets", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 2, "precio_unitario": 17975.0}, {"producto_id": "PRD-0038", "nombre": "Tubix grande", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 35950.0}], "subtotal": 71900.0, "descuento_pct": 0, "total": 71900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-31", "fecha": "2026-03-13T00:00:00", "items": [{"producto_id": "PRD-0039", "nombre": "Memoria (juego)", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20900.0}], "subtotal": 20900.0, "descuento_pct": 0, "total": 20900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-32", "fecha": "2026-03-13T00:00:00", "items": [{"producto_id": "PRD-0014", "nombre": "Pastillas de colores", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12800.0}], "subtotal": 12800.0, "descuento_pct": 0, "total": 12800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-33", "fecha": "2026-03-13T00:00:00", "items": [{"producto_id": "PRD-0040", "nombre": "Rakupets caja x5", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 2, "precio_unitario": 54000.0}], "subtotal": 108000.0, "descuento_pct": 0, "total": 108000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-34", "fecha": "2026-03-14T00:00:00", "items": [{"producto_id": "PRD-0041", "nombre": "Juego de pesca de maderitas", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "cantidad": 1, "precio_unitario": 56000.0}], "subtotal": 56000.0, "descuento_pct": 0, "total": 56000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-35", "fecha": "2026-03-14T00:00:00", "items": [{"producto_id": "PRD-0042", "nombre": "Set equilibrio", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 35200.1}, {"producto_id": "PRD-0043", "nombre": "Libro animales del mar", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 35200.1}], "subtotal": 70400.2, "descuento_pct": 0, "total": 70400.2, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-36", "fecha": "2026-03-17T00:00:00", "items": [{"producto_id": "PRD-0044", "nombre": "Bloques plástico grandes", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 52650.0}], "subtotal": 52650.0, "descuento_pct": 0, "total": 52650.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-37", "fecha": "2026-03-18T00:00:00", "items": [{"producto_id": "PRD-0045", "nombre": "Qubic grande", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 18200.0}, {"producto_id": "PRD-0046", "nombre": "Masas (set 3)", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 18200.0}], "subtotal": 36400.0, "descuento_pct": 0, "total": 36400.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-38", "fecha": "2026-03-18T00:00:00", "items": [{"producto_id": "PRD-0047", "nombre": "Ta-te-ti caja", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 6350.0}, {"producto_id": "PRD-0048", "nombre": "Cubo Rubik", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 6350.0}], "subtotal": 12700.0, "descuento_pct": 0, "total": 12700.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-39", "fecha": "2026-03-20T00:00:00", "items": [{"producto_id": "PRD-0049", "nombre": "Balancín", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 74868.19}], "subtotal": 74868.19, "descuento_pct": 0, "total": 74868.19, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-40", "fecha": "2026-03-21T00:00:00", "items": [{"producto_id": "PRD-0050", "nombre": "Bloques grandes de madera", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20000.0}, {"producto_id": "PRD-0051", "nombre": "Carrito", "categoria": "Vehículos y arrastre", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20000.0}, {"producto_id": "PRD-0046", "nombre": "Masas (set 3)", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20000.0}], "subtotal": 60000.0, "descuento_pct": 0, "total": 60000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-41", "fecha": "2026-03-21T00:00:00", "items": [{"producto_id": "PRD-0052", "nombre": "Metegol chico", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 27200.0}], "subtotal": 27200.0, "descuento_pct": 0, "total": 27200.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-42", "fecha": "2026-03-21T00:00:00", "items": [{"producto_id": "PRD-0053", "nombre": "Gimnasio Océano", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 33600.0}], "subtotal": 33600.0, "descuento_pct": 0, "total": 33600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-43", "fecha": "2026-03-21T00:00:00", "items": [{"producto_id": "PRD-0054", "nombre": "Bombo", "categoria": "Música e instrumentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 22426.67}, {"producto_id": "PRD-0055", "nombre": "Disfraz de dino", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 22426.67}, {"producto_id": "PRD-0024", "nombre": "Pelotitas sensoriales", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 22426.67}], "subtotal": 67280.01, "descuento_pct": 0, "total": 67280.01, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-44", "fecha": "2026-03-23T00:00:00", "items": [{"producto_id": "PRD-0033", "nombre": "Banditas mágicas", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 15000.0}], "subtotal": 15000.0, "descuento_pct": 0, "total": 15000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-45", "fecha": "2026-03-23T00:00:00", "items": [{"producto_id": "PRD-0014", "nombre": "Pastillas de colores", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11653.33}, {"producto_id": "PRD-0056", "nombre": "Aprendo a escribir mayúsculas", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11653.33}, {"producto_id": "PRD-0057", "nombre": "Luminias", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11653.33}], "subtotal": 34959.99, "descuento_pct": 0, "total": 34959.99, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-46", "fecha": "2026-03-24T00:00:00", "items": [{"producto_id": "PRD-0058", "nombre": "Caja Clap caritas", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 32800.0}], "subtotal": 32800.0, "descuento_pct": 0, "total": 32800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-47", "fecha": "2026-03-25T00:00:00", "items": [{"producto_id": "PRD-0059", "nombre": "Sobre pastillas arrugadedos", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 2100.0}], "subtotal": 2100.0, "descuento_pct": 0, "total": 2100.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-48", "fecha": "2026-03-25T00:00:00", "items": [{"producto_id": "PRD-0060", "nombre": "Sobre pastillas", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 2, "precio_unitario": 2200.0}], "subtotal": 4400.0, "descuento_pct": 0, "total": 4400.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-49", "fecha": "2026-03-26T00:00:00", "items": [{"producto_id": "PRD-0061", "nombre": "Camión tres soles", "categoria": "Vehículos y arrastre", "marca": "Genérico", "cantidad": 1, "precio_unitario": 44800.0}], "subtotal": 44800.0, "descuento_pct": 0, "total": 44800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-50", "fecha": "2026-03-26T00:00:00", "items": [{"producto_id": "PRD-0062", "nombre": "Osito", "categoria": "Peluches y muñecos", "marca": "Plan Toys", "cantidad": 1, "precio_unitario": 77600.0}], "subtotal": 77600.0, "descuento_pct": 0, "total": 77600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-51", "fecha": "2026-03-26T00:00:00", "items": [{"producto_id": "PRD-0063", "nombre": "Espuma (juego de baño)", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 8800.0}], "subtotal": 8800.0, "descuento_pct": 0, "total": 8800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-52", "fecha": "2026-03-26T00:00:00", "items": [{"producto_id": "PRD-0064", "nombre": "Circuito de bolitas", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 39200.0}], "subtotal": 39200.0, "descuento_pct": 0, "total": 39200.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-53", "fecha": "2026-03-26T00:00:00", "items": [{"producto_id": "PRD-0065", "nombre": "Rakupets mediano", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 1, "precio_unitario": 18532.0}, {"producto_id": "PRD-0066", "nombre": "Bolso poly", "categoria": "Otros / varios", "marca": "Genérico", "cantidad": 1, "precio_unitario": 18532.0}], "subtotal": 37064.0, "descuento_pct": 0, "total": 37064.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-54", "fecha": "2026-03-26T00:00:00", "items": [{"producto_id": "PRD-0067", "nombre": "Viaje a la luna (juego)", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20350.0}, {"producto_id": "PRD-0068", "nombre": "Auto con témperas para colorear", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20350.0}], "subtotal": 40700.0, "descuento_pct": 0, "total": 40700.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-55", "fecha": "2026-03-27T00:00:00", "items": [{"producto_id": "PRD-0069", "nombre": "Cartas cuerpo humano y espacio", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20600.0}], "subtotal": 20600.0, "descuento_pct": 0, "total": 20600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-56", "fecha": "2026-03-27T00:00:00", "items": [{"producto_id": "PRD-0070", "nombre": "Prono piso (rompecabezas de piso)", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 47200.0}], "subtotal": 47200.0, "descuento_pct": 0, "total": 47200.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-57", "fecha": "2026-03-27T00:00:00", "items": [{"producto_id": "PRD-0071", "nombre": "Pizarra Banquito", "categoria": "Arte y manualidades", "marca": "Banquito", "cantidad": 1, "precio_unitario": 18000.0}], "subtotal": 18000.0, "descuento_pct": 0, "total": 18000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-58", "fecha": "2026-03-27T00:00:00", "items": [{"producto_id": "PRD-0072", "nombre": "Rompecabezas de piso", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 25600.0}], "subtotal": 25600.0, "descuento_pct": 0, "total": 25600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-59", "fecha": "2026-03-27T00:00:00", "items": [{"producto_id": "PRD-0073", "nombre": "Libro 50 juegos", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 2, "precio_unitario": 18240.0}], "subtotal": 36480.0, "descuento_pct": 0, "total": 36480.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-60", "fecha": "2026-03-28T00:00:00", "items": [{"producto_id": "PRD-0074", "nombre": "Libro doméstico", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20300.0}], "subtotal": 20300.0, "descuento_pct": 0, "total": 20300.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-61", "fecha": "2026-03-30T00:00:00", "items": [{"producto_id": "PRD-0029", "nombre": "Autito", "categoria": "Vehículos y arrastre", "marca": "Genérico", "cantidad": 1, "precio_unitario": 3400.0}], "subtotal": 3400.0, "descuento_pct": 0, "total": 3400.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-62", "fecha": "2026-03-30T00:00:00", "items": [{"producto_id": "PRD-0065", "nombre": "Rakupets mediano", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 1, "precio_unitario": 24000.0}], "subtotal": 24000.0, "descuento_pct": 0, "total": 24000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-63", "fecha": "2026-03-31T00:00:00", "items": [{"producto_id": "PRD-0046", "nombre": "Masas (set 3)", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 1600.0}, {"producto_id": "PRD-0060", "nombre": "Sobre pastillas", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 1600.0}], "subtotal": 3200.0, "descuento_pct": 0, "total": 3200.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-64", "fecha": "2026-03-31T00:00:00", "items": [{"producto_id": "PRD-0075", "nombre": "Casita bomberos / castillo pintar / set Mis Calles", "categoria": "Juego simbólico", "marca": "Mis Calles", "cantidad": 1, "precio_unitario": 0.0}], "subtotal": 0.0, "descuento_pct": 0, "total": 0.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-65", "fecha": "2026-03-31T00:00:00", "items": [{"producto_id": "PRD-0076", "nombre": "Venta con dos tarjetas (productos sin detallar)", "categoria": "Otros / varios", "marca": "Genérico", "cantidad": 1, "precio_unitario": 59635.72}], "subtotal": 59635.72, "descuento_pct": 0, "total": 59635.72, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-66", "fecha": "2026-03-31T00:00:00", "items": [{"producto_id": "PRD-0077", "nombre": "Química divertida", "categoria": "Ciencia y experimentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 31638.46}, {"producto_id": "PRD-0078", "nombre": "Robótica Galileo", "categoria": "Ciencia y experimentos", "marca": "Galileo", "cantidad": 1, "precio_unitario": 31638.46}], "subtotal": 63276.92, "descuento_pct": 0, "total": 63276.92, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-67", "fecha": "2026-03-31T00:00:00", "items": [{"producto_id": "PRD-0079", "nombre": "Librito", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 8400.0}, {"producto_id": "PRD-0080", "nombre": "Stickers", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 8400.0}], "subtotal": 16800.0, "descuento_pct": 0, "total": 16800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-68", "fecha": "2026-04-01T00:00:00", "items": [{"producto_id": "PRD-0081", "nombre": "Libro cuerpo humano 3D", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 26880.0}], "subtotal": 26880.0, "descuento_pct": 0, "total": 26880.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-69", "fecha": "2026-04-01T00:00:00", "items": [{"producto_id": "PRD-0071", "nombre": "Pizarra Banquito", "categoria": "Arte y manualidades", "marca": "Banquito", "cantidad": 1, "precio_unitario": 12200.0}, {"producto_id": "PRD-0082", "nombre": "Imanes destellos animalitos", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12200.0}], "subtotal": 24400.0, "descuento_pct": 0, "total": 24400.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-70", "fecha": "2026-04-01T00:00:00", "items": [{"producto_id": "PRD-0083", "nombre": "Jacaranda x100", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 18700.0}], "subtotal": 18700.0, "descuento_pct": 0, "total": 18700.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-71", "fecha": "2026-04-01T00:00:00", "items": [{"producto_id": "PRD-0084", "nombre": "Marcadores", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 23300.0}, {"producto_id": "PRD-0085", "nombre": "Rompecabezas de madera", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 23300.0}, {"producto_id": "PRD-0086", "nombre": "Laboratorio portátil", "categoria": "Ciencia y experimentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 23300.0}], "subtotal": 69900.0, "descuento_pct": 0, "total": 69900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-72", "fecha": "2026-04-01T00:00:00", "items": [{"producto_id": "PRD-0057", "nombre": "Luminias", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 10866.67}, {"producto_id": "PRD-0087", "nombre": "Cartas", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 10866.67}, {"producto_id": "PRD-0026", "nombre": "LCD (pizarra dibujo)", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 10866.67}], "subtotal": 32600.01, "descuento_pct": 0, "total": 32600.01, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-73", "fecha": "2026-04-02T00:00:00", "items": [{"producto_id": "PRD-0088", "nombre": "Qubic chico", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 5475.0}, {"producto_id": "PRD-0089", "nombre": "Zapa Serabot", "categoria": "Otros / varios", "marca": "Serabot", "cantidad": 1, "precio_unitario": 5475.0}, {"producto_id": "PRD-0090", "nombre": "W-Game yoyo", "categoria": "Otros / varios", "marca": "Genérico", "cantidad": 1, "precio_unitario": 5475.0}, {"producto_id": "PRD-0091", "nombre": "Scratch card chiquito", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 5475.0}], "subtotal": 21900.0, "descuento_pct": 0, "total": 21900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-74", "fecha": "2026-04-02T00:00:00", "items": [{"producto_id": "PRD-0092", "nombre": "Borrador", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 3200.0}], "subtotal": 3200.0, "descuento_pct": 0, "total": 3200.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-75", "fecha": "2026-04-04T00:00:00", "items": [{"producto_id": "PRD-0065", "nombre": "Rakupets mediano", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 1, "precio_unitario": 22975.0}, {"producto_id": "PRD-0093", "nombre": "Rakupets chico", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 2, "precio_unitario": 11487.5}], "subtotal": 45950.0, "descuento_pct": 0, "total": 45950.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-76", "fecha": "2026-04-04T00:00:00", "items": [{"producto_id": "PRD-0094", "nombre": "Alfabeto de bichos", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20500.0}, {"producto_id": "PRD-0095", "nombre": "Rompecabezas magnético Clap", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20500.0}], "subtotal": 41000.0, "descuento_pct": 0, "total": 41000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-77", "fecha": "2026-04-04T00:00:00", "items": [{"producto_id": "PRD-0065", "nombre": "Rakupets mediano", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 1, "precio_unitario": 48000.0}], "subtotal": 48000.0, "descuento_pct": 0, "total": 48000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-78", "fecha": "2026-04-07T00:00:00", "items": [{"producto_id": "PRD-0096", "nombre": "Dinosaurios (figura)", "categoria": "Peluches y muñecos", "marca": "Genérico", "cantidad": 4, "precio_unitario": 5200.0}, {"producto_id": "PRD-0011", "nombre": "Libro con sonido (barco)", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20800.0}], "subtotal": 41600.0, "descuento_pct": 0, "total": 41600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-79", "fecha": "2026-04-07T00:00:00", "items": [{"producto_id": "PRD-0097", "nombre": "Marcadores (seña)", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20000.0}], "subtotal": 20000.0, "descuento_pct": 0, "total": 20000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-80", "fecha": "2026-04-07T00:00:00", "items": [{"producto_id": "PRD-0098", "nombre": "Palitos para xilofón", "categoria": "Música e instrumentos", "marca": "Genérico", "cantidad": 2, "precio_unitario": 2426.28}, {"producto_id": "PRD-0099", "nombre": "Palitos de madera sin bolita (regalo)", "categoria": "Música e instrumentos", "marca": "Genérico", "cantidad": 2, "precio_unitario": 2426.28}], "subtotal": 9705.14, "descuento_pct": 0, "total": 9705.14, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-81", "fecha": "2026-04-08T00:00:00", "items": [{"producto_id": "PRD-0100", "nombre": "Pelota Montessori mediana", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 18800.0}], "subtotal": 18800.0, "descuento_pct": 0, "total": 18800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-82", "fecha": "2026-04-08T00:00:00", "items": [{"producto_id": "PRD-0080", "nombre": "Stickers", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 1850.0}, {"producto_id": "PRD-0101", "nombre": "Set brilla en la oscuridad", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 1850.0}], "subtotal": 3700.0, "descuento_pct": 0, "total": 3700.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-83", "fecha": "2026-04-08T00:00:00", "items": [{"producto_id": "PRD-0028", "nombre": "Pretty Girls", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 3, "precio_unitario": 3050.0}, {"producto_id": "PRD-0031", "nombre": "Dados", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 2, "precio_unitario": 4575.0}], "subtotal": 18300.0, "descuento_pct": 0, "total": 18300.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-84", "fecha": "2026-04-08T00:00:00", "items": [{"producto_id": "PRD-0102", "nombre": "Pizarrón Banquito", "categoria": "Arte y manualidades", "marca": "Banquito", "cantidad": 1, "precio_unitario": 17800.0}, {"producto_id": "PRD-0103", "nombre": "Capa de princesa", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 17800.0}], "subtotal": 35600.0, "descuento_pct": 0, "total": 35600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-85", "fecha": "2026-04-09T00:00:00", "items": [{"producto_id": "PRD-0104", "nombre": "Caballito mecedor", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 70000.0}], "subtotal": 70000.0, "descuento_pct": 0, "total": 70000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-86", "fecha": "2026-04-09T00:00:00", "items": [{"producto_id": "PRD-0084", "nombre": "Marcadores", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 10750.0}, {"producto_id": "PRD-0105", "nombre": "Pizarra LED", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 10750.0}], "subtotal": 21500.0, "descuento_pct": 0, "total": 21500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-87", "fecha": "2026-04-09T00:00:00", "items": [{"producto_id": "PRD-0106", "nombre": "Lubloks granja", "categoria": "Construcción y bloques", "marca": "Lubloks", "cantidad": 1, "precio_unitario": 36600.0}], "subtotal": 36600.0, "descuento_pct": 0, "total": 36600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-88", "fecha": "2026-04-10T00:00:00", "items": [{"producto_id": "PRD-0107", "nombre": "Bowling chico", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20300.0}], "subtotal": 20300.0, "descuento_pct": 0, "total": 20300.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-89", "fecha": "2026-04-10T00:00:00", "items": [{"producto_id": "PRD-0108", "nombre": "Pizarra carro", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 44840.0}, {"producto_id": "PRD-0107", "nombre": "Bowling chico", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 44840.0}], "subtotal": 89680.0, "descuento_pct": 0, "total": 89680.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-90", "fecha": "2026-04-10T00:00:00", "items": [{"producto_id": "PRD-0022", "nombre": "Encastres Mágicos", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "cantidad": 1, "precio_unitario": 17000.0}], "subtotal": 17000.0, "descuento_pct": 0, "total": 17000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-91", "fecha": "2026-04-10T00:00:00", "items": [{"producto_id": "PRD-0045", "nombre": "Qubic grande", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 28800.0}], "subtotal": 28800.0, "descuento_pct": 0, "total": 28800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-92", "fecha": "2026-04-11T00:00:00", "items": [{"producto_id": "PRD-0109", "nombre": "Burbujero", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 3500.0}], "subtotal": 3500.0, "descuento_pct": 0, "total": 3500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-93", "fecha": "2026-04-11T00:00:00", "items": [{"producto_id": "PRD-0110", "nombre": "Kit chico watergame Mis Calles", "categoria": "Juego simbólico", "marca": "Mis Calles", "cantidad": 1, "precio_unitario": 35800.0}], "subtotal": 35800.0, "descuento_pct": 0, "total": 35800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-94", "fecha": "2026-04-11T00:00:00", "items": [{"producto_id": "PRD-0111", "nombre": "Muñeca que abraza", "categoria": "Peluches y muñecos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 32000.0}], "subtotal": 32000.0, "descuento_pct": 0, "total": 32000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-95", "fecha": "2026-04-13T00:00:00", "items": [{"producto_id": "PRD-0071", "nombre": "Pizarra Banquito", "categoria": "Arte y manualidades", "marca": "Banquito", "cantidad": 1, "precio_unitario": 14633.33}, {"producto_id": "PRD-0112", "nombre": "Cubo Lucerito", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 14633.33}, {"producto_id": "PRD-0113", "nombre": "Imanes Pedro", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 14633.33}], "subtotal": 43899.99, "descuento_pct": 0, "total": 43899.99, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-96", "fecha": "2026-04-13T00:00:00", "items": [{"producto_id": "PRD-0114", "nombre": "Pelota chiquita mundial", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9408.04}], "subtotal": 9408.04, "descuento_pct": 0, "total": 9408.04, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-97", "fecha": "2026-04-13T00:00:00", "items": [{"producto_id": "PRD-0115", "nombre": "Kit espacio destellos", "categoria": "Ciencia y experimentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12600.0}], "subtotal": 12600.0, "descuento_pct": 0, "total": 12600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-98", "fecha": "2026-04-13T00:00:00", "items": [{"producto_id": "PRD-0116", "nombre": "Autito Tutu", "categoria": "Vehículos y arrastre", "marca": "Genérico", "cantidad": 1, "precio_unitario": 7800.0}], "subtotal": 7800.0, "descuento_pct": 0, "total": 7800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-99", "fecha": "2026-04-13T00:00:00", "items": [{"producto_id": "PRD-0117", "nombre": "Trencity Ecotown", "categoria": "Vehículos y arrastre", "marca": "Trencity", "cantidad": 1, "precio_unitario": 53700.0}], "subtotal": 53700.0, "descuento_pct": 0, "total": 53700.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-100", "fecha": "2026-04-13T00:00:00", "items": [{"producto_id": "PRD-0118", "nombre": "Perro Bubba", "categoria": "Peluches y muñecos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 23920.0}], "subtotal": 23920.0, "descuento_pct": 0, "total": 23920.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-101", "fecha": "2026-04-14T00:00:00", "items": [{"producto_id": "PRD-0018", "nombre": "Títere de mano", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 8900.0}], "subtotal": 8900.0, "descuento_pct": 0, "total": 8900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-102", "fecha": "2026-04-14T00:00:00", "items": [{"producto_id": "PRD-0014", "nombre": "Pastillas de colores", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 8200.0}, {"producto_id": "PRD-0119", "nombre": "Imanes destellos", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 8200.0}], "subtotal": 16400.0, "descuento_pct": 0, "total": 16400.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-103", "fecha": "2026-04-14T00:00:00", "items": [{"producto_id": "PRD-0014", "nombre": "Pastillas de colores", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12800.0}], "subtotal": 12800.0, "descuento_pct": 0, "total": 12800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-104", "fecha": "2026-04-14T00:00:00", "items": [{"producto_id": "PRD-0120", "nombre": "Hamaca balancín", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 75600.0}], "subtotal": 75600.0, "descuento_pct": 0, "total": 75600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-105", "fecha": "2026-04-14T00:00:00", "items": [{"producto_id": "PRD-0121", "nombre": "Labubu hojitas negras para pintar", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 1900.0}], "subtotal": 1900.0, "descuento_pct": 0, "total": 1900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-106", "fecha": "2026-04-15T00:00:00", "items": [{"producto_id": "PRD-0122", "nombre": "Encaje relieve", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "cantidad": 2, "precio_unitario": 4050.0}, {"producto_id": "PRD-0123", "nombre": "Masa pequeña", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 8100.0}], "subtotal": 16200.0, "descuento_pct": 0, "total": 16200.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-107", "fecha": "2026-04-15T00:00:00", "items": [{"producto_id": "PRD-0124", "nombre": "Encastre aros", "categoria": "Encastre / Motricidad fina", "marca": "Little Twister", "cantidad": 1, "precio_unitario": 22000.0}], "subtotal": 22000.0, "descuento_pct": 0, "total": 22000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-108", "fecha": "2026-04-16T00:00:00", "items": [{"producto_id": "PRD-0125", "nombre": "Encastre con volumen", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9870.0}], "subtotal": 9870.0, "descuento_pct": 0, "total": 9870.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-109", "fecha": "2026-04-16T00:00:00", "items": [{"producto_id": "PRD-0126", "nombre": "Cartas ingeniosamente 6/7", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9850.0}, {"producto_id": "PRD-0127", "nombre": "Escribo con stickers", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9850.0}], "subtotal": 19700.0, "descuento_pct": 0, "total": 19700.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-110", "fecha": "2026-04-16T00:00:00", "items": [{"producto_id": "PRD-0128", "nombre": "Gimnasio pequeña compañía", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 33600.0}], "subtotal": 33600.0, "descuento_pct": 0, "total": 33600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-111", "fecha": "2026-04-16T00:00:00", "items": [{"producto_id": "PRD-0129", "nombre": "Libro rompecabezas mar", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20800.0}], "subtotal": 20800.0, "descuento_pct": 0, "total": 20800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-112", "fecha": "2026-04-16T00:00:00", "items": [{"producto_id": "PRD-0130", "nombre": "Pelota Montessori chica", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 16400.0}], "subtotal": 16400.0, "descuento_pct": 0, "total": 16400.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-113", "fecha": "2026-04-17T00:00:00", "items": [{"producto_id": "PRD-0131", "nombre": "Palabras cruzadas", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 7000.0}], "subtotal": 7000.0, "descuento_pct": 0, "total": 7000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-114", "fecha": "2026-04-17T00:00:00", "items": [{"producto_id": "PRD-0132", "nombre": "Observatorio doble", "categoria": "Ciencia y experimentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 31950.0}, {"producto_id": "PRD-0038", "nombre": "Tubix grande", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 31950.0}], "subtotal": 63900.0, "descuento_pct": 0, "total": 63900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-115", "fecha": "2026-04-18T00:00:00", "items": [{"producto_id": "PRD-0133", "nombre": "Delantal chef", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20540.0}, {"producto_id": "PRD-0065", "nombre": "Rakupets mediano", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 1, "precio_unitario": 20540.0}], "subtotal": 41080.0, "descuento_pct": 0, "total": 41080.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-116", "fecha": "2026-04-18T00:00:00", "items": [{"producto_id": "PRD-0134", "nombre": "Binocular de goma", "categoria": "Otros / varios", "marca": "Genérico", "cantidad": 1, "precio_unitario": 34720.0}, {"producto_id": "PRD-0135", "nombre": "Trencity Avenida Bosque", "categoria": "Vehículos y arrastre", "marca": "Trencity", "cantidad": 1, "precio_unitario": 34720.0}, {"producto_id": "PRD-0136", "nombre": "Medidor", "categoria": "Ciencia y experimentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 34720.0}], "subtotal": 104160.0, "descuento_pct": 0, "total": 104160.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-117", "fecha": "2026-04-18T00:00:00", "items": [{"producto_id": "PRD-0137", "nombre": "Rompecabezas circo", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11900.0}], "subtotal": 11900.0, "descuento_pct": 0, "total": 11900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-118", "fecha": "2026-04-18T00:00:00", "items": [{"producto_id": "PRD-0138", "nombre": "Atrapasueños", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9430.0}], "subtotal": 9430.0, "descuento_pct": 0, "total": 9430.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-119", "fecha": "2026-04-18T00:00:00", "items": [{"producto_id": "PRD-0139", "nombre": "Muñeca Natina", "categoria": "Peluches y muñecos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 34400.0}], "subtotal": 34400.0, "descuento_pct": 0, "total": 34400.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-120", "fecha": "2026-04-18T00:00:00", "items": [{"producto_id": "PRD-0140", "nombre": "Pelotita rebotina", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 3900.0}], "subtotal": 3900.0, "descuento_pct": 0, "total": 3900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-121", "fecha": "2026-04-18T00:00:00", "items": [{"producto_id": "PRD-0141", "nombre": "Geola", "categoria": "Otros / varios", "marca": "Genérico", "cantidad": 1, "precio_unitario": 8900.0}], "subtotal": 8900.0, "descuento_pct": 0, "total": 8900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-122", "fecha": "2026-04-18T00:00:00", "items": [{"producto_id": "PRD-0142", "nombre": "Capa superhéroe", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11675.0}, {"producto_id": "PRD-0071", "nombre": "Pizarra Banquito", "categoria": "Arte y manualidades", "marca": "Banquito", "cantidad": 1, "precio_unitario": 11675.0}, {"producto_id": "PRD-0079", "nombre": "Librito", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11675.0}, {"producto_id": "PRD-0032", "nombre": "Rakupets", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 1, "precio_unitario": 11675.0}], "subtotal": 46700.0, "descuento_pct": 0, "total": 46700.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-123", "fecha": "2026-04-20T00:00:00", "items": [{"producto_id": "PRD-0143", "nombre": "Venta varios (sin detalle de producto)", "categoria": "Otros / varios", "marca": "Genérico", "cantidad": 1, "precio_unitario": 105964.24}], "subtotal": 105964.24, "descuento_pct": 0, "total": 105964.24, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-124", "fecha": "2026-04-20T00:00:00", "items": [{"producto_id": "PRD-0136", "nombre": "Medidor", "categoria": "Ciencia y experimentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 26800.0}, {"producto_id": "PRD-0065", "nombre": "Rakupets mediano", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 1, "precio_unitario": 26800.0}], "subtotal": 53600.0, "descuento_pct": 0, "total": 53600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-125", "fecha": "2026-04-21T00:00:00", "items": [{"producto_id": "PRD-0144", "nombre": "Puntero láser", "categoria": "Otros / varios", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11900.0}], "subtotal": 11900.0, "descuento_pct": 0, "total": 11900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-126", "fecha": "2026-04-21T00:00:00", "items": [{"producto_id": "PRD-0145", "nombre": "Arca de Noé", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 63900.0}], "subtotal": 63900.0, "descuento_pct": 0, "total": 63900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-127", "fecha": "2026-04-21T00:00:00", "items": [{"producto_id": "PRD-0146", "nombre": "Acordeón concertina", "categoria": "Música e instrumentos", "marca": "Plan Toys", "cantidad": 1, "precio_unitario": 42092.1}], "subtotal": 42092.1, "descuento_pct": 0, "total": 42092.1, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-128", "fecha": "2026-04-22T00:00:00", "items": [{"producto_id": "PRD-0147", "nombre": "Laboratorio de colores", "categoria": "Ciencia y experimentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 18700.0}], "subtotal": 18700.0, "descuento_pct": 0, "total": 18700.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-129", "fecha": "2026-04-22T00:00:00", "items": [{"producto_id": "PRD-0148", "nombre": "Casita Mis Calles", "categoria": "Juego simbólico", "marca": "Mis Calles", "cantidad": 2, "precio_unitario": 11150.0}], "subtotal": 22300.0, "descuento_pct": 0, "total": 22300.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-130", "fecha": "2026-04-22T00:00:00", "items": [{"producto_id": "PRD-0149", "nombre": "Puzzle piso familia", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 25287.36}], "subtotal": 25287.36, "descuento_pct": 0, "total": 25287.36, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-131", "fecha": "2026-04-23T00:00:00", "items": [{"producto_id": "PRD-0150", "nombre": "Libro camiones con textura", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12750.0}, {"producto_id": "PRD-0151", "nombre": "Cartas escribo cursiva", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12750.0}], "subtotal": 25500.0, "descuento_pct": 0, "total": 25500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-132", "fecha": "2026-04-23T00:00:00", "items": [{"producto_id": "PRD-0152", "nombre": "Masas (set)", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 2, "precio_unitario": 1400.0}], "subtotal": 2800.0, "descuento_pct": 0, "total": 2800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-133", "fecha": "2026-04-23T00:00:00", "items": [{"producto_id": "PRD-0153", "nombre": "Juego de mate (madera)", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 49600.0}], "subtotal": 49600.0, "descuento_pct": 0, "total": 49600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-134", "fecha": "2026-04-23T00:00:00", "items": [{"producto_id": "PRD-0154", "nombre": "Pelotitas texturadas", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 18000.0}], "subtotal": 18000.0, "descuento_pct": 0, "total": 18000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-135", "fecha": "2026-04-23T00:00:00", "items": [{"producto_id": "PRD-0064", "nombre": "Circuito de bolitas", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 39200.0}], "subtotal": 39200.0, "descuento_pct": 0, "total": 39200.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-136", "fecha": "2026-04-24T00:00:00", "items": [{"producto_id": "PRD-0155", "nombre": "Las familias (juego)", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 16940.0}], "subtotal": 16940.0, "descuento_pct": 0, "total": 16940.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-137", "fecha": "2026-04-24T00:00:00", "items": [{"producto_id": "PRD-0156", "nombre": "Trencity Bomby", "categoria": "Vehículos y arrastre", "marca": "Trencity", "cantidad": 1, "precio_unitario": 78320.0}], "subtotal": 78320.0, "descuento_pct": 0, "total": 78320.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-138", "fecha": "2026-04-25T00:00:00", "items": [{"producto_id": "PRD-0157", "nombre": "Guitarra mediana", "categoria": "Música e instrumentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11633.33}, {"producto_id": "PRD-0158", "nombre": "Auto Torky", "categoria": "Vehículos y arrastre", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11633.33}, {"producto_id": "PRD-0159", "nombre": "Melvin Trencity", "categoria": "Vehículos y arrastre", "marca": "Trencity", "cantidad": 1, "precio_unitario": 11633.33}], "subtotal": 34899.99, "descuento_pct": 0, "total": 34899.99, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-139", "fecha": "2026-04-27T00:00:00", "items": [{"producto_id": "PRD-0160", "nombre": "Lubloks", "categoria": "Construcción y bloques", "marca": "Lubloks", "cantidad": 1, "precio_unitario": 38300.0}], "subtotal": 38300.0, "descuento_pct": 0, "total": 38300.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-140", "fecha": "2026-04-27T00:00:00", "items": [{"producto_id": "PRD-0105", "nombre": "Pizarra LED", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 5450.0}, {"producto_id": "PRD-0101", "nombre": "Set brilla en la oscuridad", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 5450.0}], "subtotal": 10900.0, "descuento_pct": 0, "total": 10900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-141", "fecha": "2026-04-27T00:00:00", "items": [{"producto_id": "PRD-0060", "nombre": "Sobre pastillas", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 2640.0}], "subtotal": 2640.0, "descuento_pct": 0, "total": 2640.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-142", "fecha": "2026-04-28T00:00:00", "items": [{"producto_id": "PRD-0161", "nombre": "Juego de Bowling", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 19500.0}, {"producto_id": "PRD-0001", "nombre": "Pelota Montessori", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 19500.0}], "subtotal": 39000.0, "descuento_pct": 0, "total": 39000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-143", "fecha": "2026-04-28T00:00:00", "items": [{"producto_id": "PRD-0018", "nombre": "Títere de mano", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 4, "precio_unitario": 9200.0}], "subtotal": 36800.0, "descuento_pct": 0, "total": 36800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-144", "fecha": "2026-04-28T00:00:00", "items": [{"producto_id": "PRD-0162", "nombre": "Las letras Banquito", "categoria": "Papelería didáctica", "marca": "Banquito", "cantidad": 1, "precio_unitario": 17500.0}], "subtotal": 17500.0, "descuento_pct": 0, "total": 17500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-145", "fecha": "2026-04-29T00:00:00", "items": [{"producto_id": "PRD-0005", "nombre": "Bloques Lubloks", "categoria": "Construcción y bloques", "marca": "Lubloks", "cantidad": 1, "precio_unitario": 26750.0}, {"producto_id": "PRD-0151", "nombre": "Cartas escribo cursiva", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 26750.0}], "subtotal": 53500.0, "descuento_pct": 0, "total": 53500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-146", "fecha": "2026-05-02T00:00:00", "items": [{"producto_id": "PRD-0163", "nombre": "Arca (juguete)", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 66000.0}, {"producto_id": "PRD-0164", "nombre": "Bowling pequeño", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 2, "precio_unitario": 33000.0}, {"producto_id": "PRD-0165", "nombre": "Pelota Montessori arrastre", "categoria": "Vehículos y arrastre", "marca": "Genérico", "cantidad": 1, "precio_unitario": 66000.0}], "subtotal": 198000.0, "descuento_pct": 0, "total": 198000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-147", "fecha": "2026-05-02T00:00:00", "items": [{"producto_id": "PRD-0032", "nombre": "Rakupets", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 2, "precio_unitario": 14000.0}], "subtotal": 28000.0, "descuento_pct": 0, "total": 28000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-148", "fecha": "2026-05-02T00:00:00", "items": [{"producto_id": "PRD-0166", "nombre": "Facebrillo libro jardines", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 22850.0}, {"producto_id": "PRD-0167", "nombre": "Libro unicornio", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 22850.0}], "subtotal": 45700.0, "descuento_pct": 0, "total": 45700.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-149", "fecha": "2026-05-02T00:00:00", "items": [{"producto_id": "PRD-0032", "nombre": "Rakupets", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 2, "precio_unitario": 10000.0}, {"producto_id": "PRD-0168", "nombre": "Superhéroe colección", "categoria": "Peluches y muñecos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20000.0}], "subtotal": 40000.0, "descuento_pct": 0, "total": 40000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-150", "fecha": "2026-05-04T00:00:00", "items": [{"producto_id": "PRD-0169", "nombre": "Libro con puzzle en cada hoja", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20720.0}], "subtotal": 20720.0, "descuento_pct": 0, "total": 20720.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-151", "fecha": "2026-05-04T00:00:00", "items": [{"producto_id": "PRD-0064", "nombre": "Circuito de bolitas", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 37518.32}], "subtotal": 37518.32, "descuento_pct": 0, "total": 37518.32, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-152", "fecha": "2026-05-04T00:00:00", "items": [{"producto_id": "PRD-0170", "nombre": "Juego de donas y hamburguesa", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 30000.0}], "subtotal": 30000.0, "descuento_pct": 0, "total": 30000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-153", "fecha": "2026-05-04T00:00:00", "items": [{"producto_id": "PRD-0171", "nombre": "Sistema Solar (juego)", "categoria": "Ciencia y experimentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 36000.0}], "subtotal": 36000.0, "descuento_pct": 0, "total": 36000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-154", "fecha": "2026-05-05T00:00:00", "items": [{"producto_id": "PRD-0022", "nombre": "Encastres mágicos", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "cantidad": 1, "precio_unitario": 14600.0}, {"producto_id": "PRD-0172", "nombre": "Personitas imán Clap", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 14600.0}], "subtotal": 29200.0, "descuento_pct": 0, "total": 29200.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-155", "fecha": "2026-05-05T00:00:00", "items": [{"producto_id": "PRD-0173", "nombre": "Daki ositos", "categoria": "Peluches y muñecos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 16975.0}, {"producto_id": "PRD-0174", "nombre": "Encaje relieve transporte", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "cantidad": 1, "precio_unitario": 16975.0}], "subtotal": 33950.0, "descuento_pct": 0, "total": 33950.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-156", "fecha": "2026-05-05T00:00:00", "items": [{"producto_id": "PRD-0175", "nombre": "Libro 50 juegos de animales", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 18300.0}], "subtotal": 18300.0, "descuento_pct": 0, "total": 18300.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-157", "fecha": "2026-05-06T00:00:00", "items": [{"producto_id": "PRD-0005", "nombre": "Bloques Lubloks", "categoria": "Construcción y bloques", "marca": "Lubloks", "cantidad": 1, "precio_unitario": 41500.0}], "subtotal": 41500.0, "descuento_pct": 0, "total": 41500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-158", "fecha": "2026-05-06T00:00:00", "items": [{"producto_id": "PRD-0176", "nombre": "Cochecito Tutu", "categoria": "Vehículos y arrastre", "marca": "Genérico", "cantidad": 1, "precio_unitario": 7800.0}], "subtotal": 7800.0, "descuento_pct": 0, "total": 7800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-159", "fecha": "2026-05-06T00:00:00", "items": [{"producto_id": "PRD-0177", "nombre": "Caja pastillas", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12676.1}], "subtotal": 12676.1, "descuento_pct": 0, "total": 12676.1, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-160", "fecha": "2026-05-06T00:00:00", "items": [{"producto_id": "PRD-0178", "nombre": "Clatter", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Plan Toys", "cantidad": 1, "precio_unitario": 35000.0}], "subtotal": 35000.0, "descuento_pct": 0, "total": 35000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-161", "fecha": "2026-05-06T00:00:00", "items": [{"producto_id": "PRD-0179", "nombre": "Cocodrilo de colores", "categoria": "Vehículos y arrastre", "marca": "Plan Toys", "cantidad": 1, "precio_unitario": 45500.0}], "subtotal": 45500.0, "descuento_pct": 0, "total": 45500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-162", "fecha": "2026-05-07T00:00:00", "items": [{"producto_id": "PRD-0180", "nombre": "Memoria Banquito", "categoria": "Juegos de mesa / cartas", "marca": "Banquito", "cantidad": 1, "precio_unitario": 16800.0}], "subtotal": 16800.0, "descuento_pct": 0, "total": 16800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-163", "fecha": "2026-05-07T00:00:00", "items": [{"producto_id": "PRD-0181", "nombre": "Caja pastillas agua", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 2, "precio_unitario": 10250.0}], "subtotal": 20500.0, "descuento_pct": 0, "total": 20500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-164", "fecha": "2026-05-07T00:00:00", "items": [{"producto_id": "PRD-0024", "nombre": "Pelotitas sensoriales", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 17000.0}], "subtotal": 17000.0, "descuento_pct": 0, "total": 17000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-165", "fecha": "2026-05-07T00:00:00", "items": [{"producto_id": "PRD-0153", "nombre": "Juego de mate (madera)", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 45600.0}], "subtotal": 45600.0, "descuento_pct": 0, "total": 45600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-166", "fecha": "2026-05-08T00:00:00", "items": [{"producto_id": "PRD-0182", "nombre": "Metegol", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 60800.0}], "subtotal": 60800.0, "descuento_pct": 0, "total": 60800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-167", "fecha": "2026-05-08T00:00:00", "items": [{"producto_id": "PRD-0028", "nombre": "Pretty Girls", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 7400.0}], "subtotal": 7400.0, "descuento_pct": 0, "total": 7400.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-168", "fecha": "2026-05-08T00:00:00", "items": [{"producto_id": "PRD-0183", "nombre": "Librito PVC", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12500.0}], "subtotal": 12500.0, "descuento_pct": 0, "total": 12500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-169", "fecha": "2026-05-08T00:00:00", "items": [{"producto_id": "PRD-0184", "nombre": "Celestin", "categoria": "Otros / varios", "marca": "Genérico", "cantidad": 1, "precio_unitario": 18000.0}], "subtotal": 18000.0, "descuento_pct": 0, "total": 18000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-170", "fecha": "2026-05-09T00:00:00", "items": [{"producto_id": "PRD-0185", "nombre": "Puzzle Banquito 8 piezas tortuga", "categoria": "Rompecabezas", "marca": "Banquito", "cantidad": 1, "precio_unitario": 8200.0}], "subtotal": 8200.0, "descuento_pct": 0, "total": 8200.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-171", "fecha": "2026-05-09T00:00:00", "items": [{"producto_id": "PRD-0186", "nombre": "Piloto (juguete)", "categoria": "Vehículos y arrastre", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11000.0}, {"producto_id": "PRD-0187", "nombre": "Librito pinto y sumo", "categoria": "Libros y cuentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11000.0}], "subtotal": 22000.0, "descuento_pct": 0, "total": 22000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-172", "fecha": "2026-05-11T00:00:00", "items": [{"producto_id": "PRD-0188", "nombre": "Pista de reciclaje Trencity", "categoria": "Vehículos y arrastre", "marca": "Trencity", "cantidad": 1, "precio_unitario": 45500.0}], "subtotal": 45500.0, "descuento_pct": 0, "total": 45500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-173", "fecha": "2026-05-11T00:00:00", "items": [{"producto_id": "PRD-0189", "nombre": "Avión de madera", "categoria": "Vehículos y arrastre", "marca": "Genérico", "cantidad": 1, "precio_unitario": 22300.0}], "subtotal": 22300.0, "descuento_pct": 0, "total": 22300.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-174", "fecha": "2026-05-11T00:00:00", "items": [{"producto_id": "PRD-0190", "nombre": "Puzzle Banquito 4 piezas", "categoria": "Rompecabezas", "marca": "Banquito", "cantidad": 1, "precio_unitario": 10780.0}], "subtotal": 10780.0, "descuento_pct": 0, "total": 10780.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-175", "fecha": "2026-05-12T00:00:00", "items": [{"producto_id": "PRD-0191", "nombre": "Pizarrón", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 107000.0}], "subtotal": 107000.0, "descuento_pct": 0, "total": 107000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-176", "fecha": "2026-05-14T00:00:00", "items": [{"producto_id": "PRD-0192", "nombre": "Peluche pato", "categoria": "Peluches y muñecos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11150.0}, {"producto_id": "PRD-0193", "nombre": "Peluche mono", "categoria": "Peluches y muñecos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 11150.0}], "subtotal": 22300.0, "descuento_pct": 0, "total": 22300.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-177", "fecha": "2026-05-14T00:00:00", "items": [{"producto_id": "PRD-0018", "nombre": "Títere de mano", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 2, "precio_unitario": 11500.0}], "subtotal": 23000.0, "descuento_pct": 0, "total": 23000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-178", "fecha": "2026-05-14T00:00:00", "items": [{"producto_id": "PRD-0144", "nombre": "Puntero láser", "categoria": "Otros / varios", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12000.0}], "subtotal": 12000.0, "descuento_pct": 0, "total": 12000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-179", "fecha": "2026-05-15T00:00:00", "items": [{"producto_id": "PRD-0194", "nombre": "Daki cod 802", "categoria": "Otros / varios", "marca": "Genérico", "cantidad": 1, "precio_unitario": 17500.0}], "subtotal": 17500.0, "descuento_pct": 0, "total": 17500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-180", "fecha": "2026-05-15T00:00:00", "items": [{"producto_id": "PRD-0195", "nombre": "Cartas Uno", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 2333.33}, {"producto_id": "PRD-0196", "nombre": "Face Stickers", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 2333.33}, {"producto_id": "PRD-0080", "nombre": "Stickers", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 2333.33}], "subtotal": 6999.99, "descuento_pct": 0, "total": 6999.99, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-181", "fecha": "2026-05-15T00:00:00", "items": [{"producto_id": "PRD-0197", "nombre": "Guitarra", "categoria": "Música e instrumentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 8500.0}], "subtotal": 8500.0, "descuento_pct": 0, "total": 8500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-182", "fecha": "2026-05-15T00:00:00", "items": [{"producto_id": "PRD-0198", "nombre": "Puzzle doble Tancovich", "categoria": "Rompecabezas", "marca": "Tancovich", "cantidad": 1, "precio_unitario": 126770.0}], "subtotal": 126770.0, "descuento_pct": 0, "total": 126770.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-183", "fecha": "2026-05-15T00:00:00", "items": [{"producto_id": "PRD-0198", "nombre": "Puzzle doble Tancovich", "categoria": "Rompecabezas", "marca": "Tancovich", "cantidad": 2, "precio_unitario": 9870.0}], "subtotal": 19740.0, "descuento_pct": 0, "total": 19740.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-184", "fecha": "2026-05-15T00:00:00", "items": [{"producto_id": "PRD-0032", "nombre": "Rakupets x2", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 2, "precio_unitario": 10000.0}, {"producto_id": "PRD-0032", "nombre": "Rakupets x1", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 1, "precio_unitario": 20000.0}], "subtotal": 40000.0, "descuento_pct": 0, "total": 40000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-185", "fecha": "2026-05-16T00:00:00", "items": [{"producto_id": "PRD-0040", "nombre": "Rakupets caja x5", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 1, "precio_unitario": 52800.0}], "subtotal": 52800.0, "descuento_pct": 0, "total": 52800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-186", "fecha": "2026-05-18T00:00:00", "items": [{"producto_id": "PRD-0040", "nombre": "Rakupets caja x5", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 1, "precio_unitario": 52800.0}], "subtotal": 52800.0, "descuento_pct": 0, "total": 52800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-187", "fecha": "2026-05-18T00:00:00", "items": [{"producto_id": "PRD-0199", "nombre": "Juego de Bowling chico", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 23000.0}], "subtotal": 23000.0, "descuento_pct": 0, "total": 23000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-188", "fecha": "2026-05-18T00:00:00", "items": [{"producto_id": "PRD-0200", "nombre": "Rompecabezas Banquito 6 piezas", "categoria": "Rompecabezas", "marca": "Banquito", "cantidad": 1, "precio_unitario": 10000.0}, {"producto_id": "PRD-0201", "nombre": "Los Números (juego)", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 10000.0}], "subtotal": 20000.0, "descuento_pct": 0, "total": 20000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-189", "fecha": "2026-05-19T00:00:00", "items": [{"producto_id": "PRD-0202", "nombre": "Cartas Uno Mundial", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 3900.0}], "subtotal": 3900.0, "descuento_pct": 0, "total": 3900.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-190", "fecha": "2026-05-19T00:00:00", "items": [{"producto_id": "PRD-0203", "nombre": "Las secuencias (juego)", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 20000.0}], "subtotal": 20000.0, "descuento_pct": 0, "total": 20000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-191", "fecha": "2026-05-20T00:00:00", "items": [{"producto_id": "PRD-0204", "nombre": "Delantal", "categoria": "Juego simbólico", "marca": "Ecolekua", "cantidad": 1, "precio_unitario": 16500.0}], "subtotal": 16500.0, "descuento_pct": 0, "total": 16500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-192", "fecha": "2026-05-20T00:00:00", "items": [{"producto_id": "PRD-0205", "nombre": "Tambor", "categoria": "Música e instrumentos", "marca": "Plan Toys", "cantidad": 1, "precio_unitario": 27000.0}, {"producto_id": "PRD-0206", "nombre": "Banco de descarga maderitas", "categoria": "Construcción y bloques", "marca": "Genérico", "cantidad": 1, "precio_unitario": 27000.0}], "subtotal": 54000.0, "descuento_pct": 0, "total": 54000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-193", "fecha": "2026-05-21T00:00:00", "items": [{"producto_id": "PRD-0207", "nombre": "Rompecabezas largo ciudad", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 26792.0}, {"producto_id": "PRD-0203", "nombre": "Las secuencias (juego)", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 26792.0}], "subtotal": 53584.0, "descuento_pct": 0, "total": 53584.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-194", "fecha": "2026-05-22T00:00:00", "items": [{"producto_id": "PRD-0208", "nombre": "Balance y equilibrio (juego)", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 38300.0}], "subtotal": 38300.0, "descuento_pct": 0, "total": 38300.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-195", "fecha": "2026-05-22T00:00:00", "items": [{"producto_id": "PRD-0209", "nombre": "Microscopio", "categoria": "Ciencia y experimentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 36213.33}, {"producto_id": "PRD-0210", "nombre": "La ciencia robótica", "categoria": "Ciencia y experimentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 36213.33}, {"producto_id": "PRD-0211", "nombre": "Planchas de stickers", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 2, "precio_unitario": 18106.67}], "subtotal": 108639.99, "descuento_pct": 0, "total": 108639.99, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-196", "fecha": "2026-05-23T00:00:00", "items": [{"producto_id": "PRD-0174", "nombre": "Encaje relieve transporte", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "cantidad": 1, "precio_unitario": 9870.0}], "subtotal": 9870.0, "descuento_pct": 0, "total": 9870.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-197", "fecha": "2026-05-23T00:00:00", "items": [{"producto_id": "PRD-0212", "nombre": "Torta puzzle de madera", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 19000.0}], "subtotal": 19000.0, "descuento_pct": 0, "total": 19000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-198", "fecha": "2026-05-23T00:00:00", "items": [{"producto_id": "PRD-0054", "nombre": "Bombo", "categoria": "Música e instrumentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 52800.0}], "subtotal": 52800.0, "descuento_pct": 0, "total": 52800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-199", "fecha": "2026-05-26T00:00:00", "items": [{"producto_id": "PRD-0014", "nombre": "Pastillas de colores", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 1, "precio_unitario": 12800.0}], "subtotal": 12800.0, "descuento_pct": 0, "total": 12800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-200", "fecha": "2026-05-26T00:00:00", "items": [{"producto_id": "PRD-0065", "nombre": "Rakupets mediano", "categoria": "Peluches y muñecos", "marca": "Rakupets", "cantidad": 1, "precio_unitario": 28000.0}], "subtotal": 28000.0, "descuento_pct": 0, "total": 28000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-201", "fecha": "2026-05-26T00:00:00", "items": [{"producto_id": "PRD-0213", "nombre": "Muñeca Natina y Moda", "categoria": "Peluches y muñecos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 37500.0}], "subtotal": 37500.0, "descuento_pct": 0, "total": 37500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-202", "fecha": "2026-05-26T00:00:00", "items": [{"producto_id": "PRD-0060", "nombre": "Sobre pastillas", "categoria": "Papelería didáctica", "marca": "Genérico", "cantidad": 2, "precio_unitario": 2640.0}], "subtotal": 5280.0, "descuento_pct": 0, "total": 5280.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-203", "fecha": "2026-05-27T00:00:00", "items": [{"producto_id": "PRD-0214", "nombre": "Caja de arte Clap", "categoria": "Arte y manualidades", "marca": "Genérico", "cantidad": 1, "precio_unitario": 33500.0}], "subtotal": 33500.0, "descuento_pct": 0, "total": 33500.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-204", "fecha": "2026-05-27T00:00:00", "items": [{"producto_id": "PRD-0215", "nombre": "Básquet", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Serabot", "cantidad": 1, "precio_unitario": 51920.0}], "subtotal": 51920.0, "descuento_pct": 0, "total": 51920.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-205", "fecha": "2026-05-28T00:00:00", "items": [{"producto_id": "PRD-0216", "nombre": "Juguetes varios (sin detalle)", "categoria": "Otros / varios", "marca": "Genérico", "cantidad": 1, "precio_unitario": 277000.0}], "subtotal": 277000.0, "descuento_pct": 0, "total": 277000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-206", "fecha": "2026-05-28T00:00:00", "items": [{"producto_id": "PRD-0217", "nombre": "Caracol de arrastre", "categoria": "Vehículos y arrastre", "marca": "Genérico", "cantidad": 1, "precio_unitario": 39600.0}], "subtotal": 39600.0, "descuento_pct": 0, "total": 39600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-207", "fecha": "2026-05-29T00:00:00", "items": [{"producto_id": "PRD-0218", "nombre": "Detectives en acción (juego)", "categoria": "Juegos de mesa / cartas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 39800.0}], "subtotal": 39800.0, "descuento_pct": 0, "total": 39800.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-208", "fecha": "2026-05-29T00:00:00", "items": [{"producto_id": "PRD-0085", "nombre": "Rompecabezas de madera", "categoria": "Rompecabezas", "marca": "Genérico", "cantidad": 1, "precio_unitario": 31120.0}], "subtotal": 31120.0, "descuento_pct": 0, "total": 31120.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-209", "fecha": "2026-05-29T00:00:00", "items": [{"producto_id": "PRD-0219", "nombre": "La ciencia del agua", "categoria": "Ciencia y experimentos", "marca": "Genérico", "cantidad": 1, "precio_unitario": 33600.0}], "subtotal": 33600.0, "descuento_pct": 0, "total": 33600.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-210", "fecha": "2026-05-30T00:00:00", "items": [{"producto_id": "PRD-0220", "nombre": "Pato", "categoria": "Vehículos y arrastre", "marca": "Plan Toys", "cantidad": 1, "precio_unitario": 41360.0}], "subtotal": 41360.0, "descuento_pct": 0, "total": 41360.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-211", "fecha": "2026-05-30T00:00:00", "items": [{"producto_id": "PRD-0221", "nombre": "Fashion Jewels", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 5733.33}, {"producto_id": "PRD-0222", "nombre": "Look 49", "categoria": "Juego simbólico", "marca": "Genérico", "cantidad": 1, "precio_unitario": 5733.33}, {"producto_id": "PRD-0223", "nombre": "Zapatilla con cordones (didáctica)", "categoria": "Encastre / Motricidad fina", "marca": "Genérico", "cantidad": 1, "precio_unitario": 5733.33}], "subtotal": 17199.99, "descuento_pct": 0, "total": 17199.99, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-212", "fecha": "2026-05-30T00:00:00", "items": [{"producto_id": "PRD-0005", "nombre": "Bloques Lubloks", "categoria": "Construcción y bloques", "marca": "Lubloks", "cantidad": 2, "precio_unitario": 41500.0}], "subtotal": 83000.0, "descuento_pct": 0, "total": 83000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-213", "fecha": "2026-05-30T00:00:00", "items": [{"producto_id": "PRD-0107", "nombre": "Bowling chico", "categoria": "Juego al aire libre / motricidad gruesa", "marca": "Genérico", "cantidad": 1, "precio_unitario": 23000.0}], "subtotal": 23000.0, "descuento_pct": 0, "total": 23000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-214", "fecha": "2026-05-30T00:00:00", "items": [{"producto_id": "PRD-0224", "nombre": "Alligator", "categoria": "Vehículos y arrastre", "marca": "Plan Toys", "cantidad": 1, "precio_unitario": 33000.0}, {"producto_id": "PRD-0225", "nombre": "Wave Stacker", "categoria": "Construcción y bloques", "marca": "Plan Toys", "cantidad": 1, "precio_unitario": 33000.0}], "subtotal": 66000.0, "descuento_pct": 0, "total": 66000.0, "medio_pago": "Histórico", "historico": true}, {"id": "HIST-V-215", "fecha": "2026-05-30T00:00:00", "items": [{"producto_id": "PRD-0226", "nombre": "Alligator verde", "categoria": "Vehículos y arrastre", "marca": "Plan Toys", "cantidad": 1, "precio_unitario": 39600.0}], "subtotal": 39600.0, "descuento_pct": 0, "total": 39600.0, "medio_pago": "Histórico", "historico": true}];
+const GASTOS_HISTORICOS = [{"id": "HIST-G-2", "fecha": "2026-03-03T00:00:00", "descripcion": "Pagamos flete maderitas", "categoria": "Gastos local", "monto": 44990.0, "historico": true}, {"id": "HIST-G-4", "fecha": "2026-03-03T00:00:00", "descripcion": "PAGAMOS TITERES MANOPLA EN EFECTIVO", "categoria": "Proveedores", "monto": 90000.0, "historico": true}, {"id": "HIST-G-7", "fecha": "2026-03-04T00:00:00", "descripcion": "PAGAMOS CLARO WIFI", "categoria": "Gastos local", "monto": 19910.52, "historico": true}, {"id": "HIST-G-23", "fecha": "2026-03-10T00:00:00", "descripcion": "PAGAMOS ALQUILER", "categoria": "Gastos local", "monto": 739841.7, "historico": true}, {"id": "HIST-G-24", "fecha": "2026-03-10T00:00:00", "descripcion": "PAGAMOS ABL LOCAL", "categoria": "Gastos local", "monto": 24530.0, "historico": true}, {"id": "HIST-G-31", "fecha": "2026-03-11T00:00:00", "descripcion": "PAGAMOS AFIP SU", "categoria": "Gastos no local", "monto": 37095.95, "historico": true}, {"id": "HIST-G-33", "fecha": "2026-03-12T00:00:00", "descripcion": "PAGAMOS TOWEBS HOSTING X 3 MESES", "categoria": "Gastos local", "monto": 32397.0, "historico": true}, {"id": "HIST-G-36", "fecha": "2026-03-12T00:00:00", "descripcion": "PAGAMOS EDENOR LOCAL", "categoria": "Gastos local", "monto": 61398.42, "historico": true}, {"id": "HIST-G-44", "fecha": "2026-03-17T00:00:00", "descripcion": "PAGAMOS HOSPITAL ITALIANO XHB CIUDAD", "categoria": "Gastos no local", "monto": 488615.0, "historico": true}, {"id": "HIST-G-48", "fecha": "2026-03-19T00:00:00", "descripcion": "Pagamos expensas local", "categoria": "Gastos local", "monto": 65526.04, "historico": true}, {"id": "HIST-G-57", "fecha": "2026-03-25T00:00:00", "descripcion": "PAGAMOS ECOLECUA", "categoria": "Proveedores", "monto": 125100.0, "historico": true}, {"id": "HIST-G-72", "fecha": "2026-03-30T00:00:00", "descripcion": "PAGAMOS LUCERIO CON CHEQUE 30 DIAS", "categoria": "Proveedores", "monto": 111389.0, "historico": true}, {"id": "HIST-G-85", "fecha": "2026-04-01T00:00:00", "descripcion": "PAGAMOS BANQUITO", "categoria": "Proveedores", "monto": 194760.0, "historico": true}, {"id": "HIST-G-91", "fecha": "2026-04-07T00:00:00", "descripcion": "PAGAMOS CLARO WIFI", "categoria": "Gastos local", "monto": 20707.0, "historico": true}, {"id": "HIST-G-99", "fecha": "2026-04-08T00:00:00", "descripcion": "PAGAMOS RAKUPETS$  72000 ef y $90000 mpago", "categoria": "Proveedores", "monto": 162000.0, "historico": true}, {"id": "HIST-G-100", "fecha": "2026-04-08T00:00:00", "descripcion": "PAGAMOS A JUAN 5 CAJAS DE MARCADORES", "categoria": "Proveedores", "monto": 34000.0, "historico": true}, {"id": "HIST-G-107", "fecha": "2026-04-10T00:00:00", "descripcion": "PAGAMOS ABL LOCAL", "categoria": "Gastos local", "monto": 24530.0, "historico": true}, {"id": "HIST-G-108", "fecha": "2026-04-10T00:00:00", "descripcion": "PAGAMOS ALQUILER", "categoria": "Gastos local", "monto": 739841.7, "historico": true}, {"id": "HIST-G-115", "fecha": "2026-04-13T00:00:00", "descripcion": "PAGAMOS AFIP SU", "categoria": "Gastos no local", "monto": 37449.05, "historico": true}, {"id": "HIST-G-120", "fecha": "2026-04-13T00:00:00", "descripcion": "PAGAMOS TANCOVICH", "categoria": "Proveedores", "monto": 187290.0, "historico": true}, {"id": "HIST-G-128", "fecha": "2026-04-15T00:00:00", "descripcion": "PAGAMOS CON CHEQUE A SEPT GALILEO", "categoria": "Proveedores", "monto": 495000.0, "historico": true}, {"id": "HIST-G-134", "fecha": "2026-04-17T00:00:00", "descripcion": "Pagamos hospital italiano", "categoria": "Gastos no local", "monto": 496000.0, "historico": true}, {"id": "HIST-G-145", "fecha": "2026-04-20T00:00:00", "descripcion": "PAGAMOS LITTLE TWISTER EFECTIVO", "categoria": "Proveedores", "monto": 71000.0, "historico": true}, {"id": "HIST-G-147", "fecha": "2026-04-20T00:00:00", "descripcion": "PAGAMOS EXPENSAS LOCAL HB CIUDAD", "categoria": "Gastos local", "monto": 63526.04, "historico": true}, {"id": "HIST-G-149", "fecha": "2026-04-20T00:00:00", "descripcion": "PAGAMOS A  JUAN", "categoria": "Proveedores", "monto": 122300.0, "historico": true}, {"id": "HIST-G-161", "fecha": "2026-04-24T00:00:00", "descripcion": "PAGAMOS MATAFUEGO RECARGA", "categoria": "Gastos local", "monto": 30000.0, "historico": true}, {"id": "HIST-G-162", "fecha": "2026-04-24T00:00:00", "descripcion": "PAGAMOS EDENOR LOCAL 2 FACTURAS UNA DE ENERO", "categoria": "Gastos local", "monto": 141134.32, "historico": true}, {"id": "HIST-G-181", "fecha": "2026-05-05T00:00:00", "descripcion": "PAGAMOS WIFI LOCAL CLARO", "categoria": "Gastos local", "monto": 21514.51, "historico": true}, {"id": "HIST-G-202", "fecha": "2026-05-11T00:00:00", "descripcion": "PAGAMOS ABL LOCAL", "categoria": "Gastos local", "monto": 24530.0, "historico": true}, {"id": "HIST-G-203", "fecha": "2026-05-11T00:00:00", "descripcion": "PAGAMOS ALQUILER", "categoria": "Gastos local", "monto": 739841.7, "historico": true}, {"id": "HIST-G-206", "fecha": "2026-05-13T00:00:00", "descripcion": "PAGAMOS AFIP SU", "categoria": "Gastos no local", "monto": 37571.0, "historico": true}, {"id": "HIST-G-220", "fecha": "2026-05-19T00:00:00", "descripcion": "PAGAMOS H ITALIANO", "categoria": "Gastos no local", "monto": 512069.99, "historico": true}, {"id": "HIST-G-227", "fecha": "2026-05-22T00:00:00", "descripcion": "PAGAMOS EXPENSAS LOCAL", "categoria": "Gastos local", "monto": 64526.04, "historico": true}, {"id": "HIST-G-238", "fecha": "2026-05-28T00:00:00", "descripcion": "PAGAMOS EDENOR LOCAL", "categoria": "Gastos local", "monto": 58820.62, "historico": true}];
+
+let cart = [];
+let selectedPayment = null;
+let ventasGuardadas = [];
+let histFilter = 'todos';
+let dashPeriodDays = 30;
+let estadoMode = 'trimestral';
+let estadoYear = 2026;
+let estadoQuarter = 1;
+
+const DEFAULT_TAXES = { 'Efectivo': 0, 'Mercado Pago': 6, 'Transferencia': 6, 'Debito': 6, 'Credito': 12 };
+const DEFAULT_FIXED_COSTS = [
+  { nombre: 'Alquiler', monto: 0 },
+  { nombre: 'Agua', monto: 0 },
+  { nombre: 'Luz', monto: 0 },
+  { nombre: 'Gas', monto: 0 },
+  { nombre: 'Impuestos / ABL', monto: 0 },
+];
+let configIdentidad = { nombre: 'Crear y Jugar', logo: null, banner: null };
+let configFixedCosts = JSON.parse(JSON.stringify(DEFAULT_FIXED_COSTS));
+let configTaxes = { ...DEFAULT_TAXES };
+
+const COLOR_INGRESO = '#3D7E73';
+const COLOR_EGRESO = '#D85A30';
+const PALETTE = ['#8F83B9','#BCE3DE','#F7D5C4','#FFF0B3','#F4A896','#52486C','#A8D4CC','#D4C8E8'];
+
+function setHeaderDate(){
+  const d = new Date();
+  const opts = { weekday:'long', day:'numeric', month:'long' };
+  let str = d.toLocaleDateString('es-AR', opts);
+  str = str.charAt(0).toUpperCase() + str.slice(1);
+  document.getElementById('header-date').textContent = str;
+}
+setHeaderDate();
+
+// ─── BACKEND CONFIG ───────────────────────────────────────────────────────
+const STORAGE_KEY = 'cyj_ventas_local_v1';
+const CONFIG_KEY = 'cyj_config_v1';
+const BACKEND_KEY = 'cyj_backend_url_v1';
+
+function getBackendURL(){
+  return localStorage.getItem(BACKEND_KEY) || '';
+}
+
+function setBackendURL(url){
+  localStorage.setItem(BACKEND_KEY, url.trim().replace(/\/$/, ''));
+}
+
+// ─── LOADING STATE ────────────────────────────────────────────────────────
+let backendConnected = false;
+
+async function apiGet(path){
+  const base = getBackendURL();
+  if(!base) throw new Error('Sin URL de backend');
+  const res = await fetch(base + path);
+  if(!res.ok) throw new Error('Error ' + res.status);
+  return res.json();
+}
+
+async function apiPost(path, body){
+  const base = getBackendURL();
+  if(!base) throw new Error('Sin URL de backend');
+  const res = await fetch(base + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if(!res.ok) throw new Error('Error ' + res.status);
+  return res.json();
+}
+
+async function loadVentas(){
+  try{
+    const data = await apiGet('/ventas');
+    ventasGuardadas = (data.ventas || []).filter(v => !v.historico);
+    backendConnected = true;
+    updateConnectionBadge(true);
+
+    // Check if historical data needs to be imported
+    const histInDB = (data.ventas || []).filter(v => v.historico);
+    if(histInDB.length === 0 && VENTAS_HISTORICAS.length > 0){
+      console.log('Importando histórico al backend...');
+      await apiPost('/ventas/bulk', { ventas: VENTAS_HISTORICAS });
+      await apiPost('/gastos/bulk', { gastos: GASTOS_HISTORICOS });
+      console.log('Histórico importado OK');
+    }
+  }catch(e){
+    console.warn('Backend no disponible, usando localStorage:', e.message);
+    backendConnected = false;
+    updateConnectionBadge(false);
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      ventasGuardadas = raw ? JSON.parse(raw) : [];
+    }catch(){ ventasGuardadas = []; }
+  }
+}
+
+async function saveVentas(){
+  // Always save to localStorage as fallback
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(ventasGuardadas)); }
+  catch(e){}
+}
+
+async function saveVentaToBackend(venta){
+  if(!backendConnected) return;
+  try{ await apiPost('/ventas', venta); }
+  catch(e){ console.warn('No se pudo guardar venta en backend:', e.message); }
+}
+
+async function loadConfig(){
+  // Config: localStorage always (fast), sync with backend if available
+  try{
+    const raw = localStorage.getItem(CONFIG_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      configIdentidad = parsed.identidad || configIdentidad;
+      configFixedCosts = parsed.fixedCosts || configFixedCosts;
+      configTaxes = parsed.taxes || configTaxes;
+    }
+  }catch(e){}
+
+  // Try backend for authoritative config (overrides localStorage)
+  if(backendConnected){
+    try{
+      const data = await apiGet('/config');
+      if(data.config.fixedCosts) configFixedCosts = data.config.fixedCosts;
+      if(data.config.taxes) configTaxes = data.config.taxes;
+      if(data.config.identidad){
+        const id = data.config.identidad;
+        // Don't overwrite logo/banner from backend (base64 too large; kept local)
+        configIdentidad.nombre = id.nombre || configIdentidad.nombre;
+      }
+    }catch(e){}
+  }
+
+  applyIdentidad();
+  renderFixedCostsForm();
+  renderTaxForm();
+}
+
+async function saveConfig(){
+  // Save to localStorage
+  try{ localStorage.setItem(CONFIG_KEY, JSON.stringify({ identidad: configIdentidad, fixedCosts: configFixedCosts, taxes: configTaxes })); }
+  catch(e){}
+  // Sync to backend (without logo/banner to keep payload small)
+  if(backendConnected){
+    try{
+      await apiPost('/config/bulk', { config: {
+        fixedCosts: configFixedCosts,
+        taxes: configTaxes,
+        identidad: { nombre: configIdentidad.nombre },
+      }});
+    }catch(e){}
+  }
+}
+
+function updateConnectionBadge(connected){
+  const badge = document.getElementById('connection-badge');
+  if(!badge) return;
+  badge.textContent = connected ? '● Online' : '● Offline';
+  badge.style.color = connected ? '#BCE3DE' : '#F7D5C4';
+}
+
+function applyIdentidad(){
+  document.getElementById('header-title').textContent = configIdentidad.nombre || 'Crear y Jugar';
+  document.getElementById('config-nombre').value = configIdentidad.nombre || '';
+
+  const logoImg = document.getElementById('header-logo-img');
+  const logoDefault = document.getElementById('header-logo-default');
+  if(configIdentidad.logo){
+    logoImg.src = configIdentidad.logo;
+    logoImg.style.display = 'block';
+    logoDefault.style.display = 'none';
+    document.getElementById('logo-preview').src = configIdentidad.logo;
+    document.getElementById('logo-preview').style.display = 'block';
+    document.getElementById('logo-upload-icon').style.display = 'none';
+    document.getElementById('logo-upload-label').textContent = 'Cambiar logo';
+  }else{
+    logoImg.style.display = 'none';
+    logoDefault.style.display = 'block';
+  }
+
+  const header = document.getElementById('header-banner');
+  if(configIdentidad.banner){
+    header.style.backgroundImage = `url(${configIdentidad.banner})`;
+    header.classList.add('has-banner');
+    document.getElementById('banner-preview').src = configIdentidad.banner;
+    document.getElementById('banner-preview').style.display = 'block';
+    document.getElementById('banner-upload-icon').style.display = 'none';
+    document.getElementById('banner-upload-label').textContent = 'Cambiar imagen de fondo';
+  }else{
+    header.style.backgroundImage = '';
+    header.classList.remove('has-banner');
+  }
+}
+
+function handleLogoUpload(input){
+  if(!input.files || !input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => { configIdentidad.logo = e.target.result; applyIdentidad(); };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function handleBannerUpload(input){
+  if(!input.files || !input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => { configIdentidad.banner = e.target.result; applyIdentidad(); };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function saveIdentidad(){
+  configIdentidad.nombre = document.getElementById('config-nombre').value.trim() || 'Crear y Jugar';
+  applyIdentidad();
+  saveConfig();
+  showToast('Identidad guardada');
+}
+
+function renderFixedCostsForm(){
+  const container = document.getElementById('fixed-costs-form');
+  container.innerHTML = configFixedCosts.map((c,i) => `
+    <div class="form-row">
+      <label>${c.nombre}</label>
+      <input type="text" inputmode="numeric" value="${c.monto || ''}" placeholder="0" data-idx="${i}" onchange="updateFixedCost(${i}, this.value)">
+    </div>
+  `).join('');
+}
+
+function updateFixedCost(idx, value){
+  const num = parseFloat(value.replace(/[^0-9.]/g,''));
+  configFixedCosts[idx].monto = isNaN(num) ? 0 : num;
+}
+
+function saveFixedCosts(){
+  saveConfig();
+  showToast('Costos fijos guardados');
+  if(document.getElementById('view-dashboard').classList.contains('active')) renderDashboard();
+  if(document.getElementById('view-estados').classList.contains('active')) renderEstados();
+}
+
+function renderTaxForm(){
+  const container = document.getElementById('tax-form');
+  const medios = ['Efectivo','Mercado Pago','Transferencia','Debito','Credito'];
+  container.innerHTML = medios.map(m => `
+    <div class="tax-row">
+      <label>${m}</label>
+      <div class="tax-input-wrap">
+        <input type="text" inputmode="numeric" value="${configTaxes[m] ?? 0}" data-medio="${m}" onchange="updateTax('${m}', this.value)">
+        <span>%</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateTax(medio, value){
+  const num = parseFloat(value.replace(/[^0-9.]/g,''));
+  configTaxes[medio] = isNaN(num) ? 0 : num;
+}
+
+function saveTaxes(){
+  saveConfig();
+  showToast('Impuestos guardados');
+  renderCart();
+}
+
+function getMonthlyFixedCostsTotal(){
+  return configFixedCosts.reduce((s,c) => s + (c.monto||0), 0);
+}
+
+function getAllVentas(){
+  return [...VENTAS_HISTORICAS, ...ventasGuardadas];
+}
+
+function getFixedCostsAsGastos(rangeStart, rangeEnd){
+  const total = getMonthlyFixedCostsTotal();
+  if(total <= 0) return [];
+  const gastos = [];
+  let cursor = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
+  while(cursor < rangeEnd){
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1);
+    if(monthEnd > rangeStart){
+      configFixedCosts.filter(c => c.monto > 0).forEach(c => {
+        gastos.push({
+          id: `FIXED-${cursor.getFullYear()}-${cursor.getMonth()+1}-${c.nombre}`,
+          fecha: new Date(cursor.getFullYear(), cursor.getMonth(), 1).toISOString(),
+          descripcion: c.nombre + ' (costo fijo)',
+          categoria: 'Costos fijos',
+          monto: c.monto,
+          historico: false, fijo: true,
+        });
+      });
+    }
+    cursor = monthEnd;
+  }
+  return gastos;
+}
+
+function getAllGastos(rangeStart, rangeEnd){
+  const base = [...GASTOS_HISTORICOS];
+  if(rangeStart && rangeEnd){
+    return [...base, ...getFixedCostsAsGastos(rangeStart, rangeEnd)];
+  }
+  const allDates = [...base.map(g=>new Date(g.fecha)), ...getAllVentas().map(v=>new Date(v.fecha)), new Date()];
+  const minDate = new Date(Math.min(...allDates.map(d=>d.getTime())));
+  const maxDate = new Date(Math.max(...allDates.map(d=>d.getTime())) + 24*60*60*1000);
+  return [...base, ...getFixedCostsAsGastos(minDate, maxDate)];
+}
+
+function switchView(view, el){
+  document.querySelectorAll('.navtab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('view-'+view).classList.add('active');
+  if(view==='dashboard') renderDashboard();
+  if(view==='historial') renderHistory();
+  if(view==='estados') renderEstados();
+  if(view==='salud') renderSalud();
+  if(view==='config'){ renderFixedCostsForm(); renderTaxForm(); }
+}
+
+/* ---------- VENTA ---------- */
+function renderResults(){
+  const q = document.getElementById('search-input').value.trim().toLowerCase();
+  const container = document.getElementById('results');
+  if(!q){ container.innerHTML=''; return; }
+  const matches = CATALOG.filter(p =>
+    p.nombre.toLowerCase().includes(q) || p.categoria.toLowerCase().includes(q) || p.marca.toLowerCase().includes(q)
+  ).slice(0,8);
+  if(matches.length===0){
+    container.innerHTML = '<div class="no-results">Sin resultados para "'+q+'"</div>';
+    return;
+  }
+  container.innerHTML = matches.map(p => `
+    <div class="result-item" onclick="addToCart('${p.id}')">
+      <div><div class="result-name">${p.nombre}</div><div class="result-meta">${p.categoria}${p.marca!=='Genérico' ? ' · '+p.marca : ''}</div></div>
+      <div class="result-price">$${p.precio.toLocaleString('es-AR')}</div>
+    </div>`).join('');
+}
+
+function addToCart(productId){
+  const product = CATALOG.find(p => p.id === productId);
+  if(!product) return;
+  const existing = cart.find(c => c.id === productId);
+  if(existing){ existing.cantidad += 1; }
+  else{ cart.push({...product, cantidad: 1, precioUnitario: product.precio}); }
+  document.getElementById('search-input').value = '';
+  document.getElementById('results').innerHTML = '';
+  renderCart();
+}
+
+function changeQty(productId, delta){
+  const item = cart.find(c => c.id === productId);
+  if(!item) return;
+  item.cantidad += delta;
+  if(item.cantidad <= 0) cart = cart.filter(c => c.id !== productId);
+  renderCart();
+}
+function removeFromCart(productId){ cart = cart.filter(c => c.id !== productId); renderCart(); }
+
+function getDescuentoPct(){
+  const raw = document.getElementById('descuento-input').value.replace('%','').trim();
+  const val = parseFloat(raw);
+  return isNaN(val) ? 0 : Math.max(0, Math.min(100, val));
+}
+function getSubtotal(){ return cart.reduce((sum, item) => sum + (item.precioUnitario * item.cantidad), 0); }
+function getTotal(){ const subtotal = getSubtotal(); const desc = getDescuentoPct(); return Math.round(subtotal * (1 - desc/100)); }
+
+function renderCart(){
+  const container = document.getElementById('cart-items');
+  if(cart.length === 0){
+    container.innerHTML = '<div class="empty-cart">Buscá un producto arriba para agregarlo a la venta</div>';
+  }else{
+    container.innerHTML = cart.map(item => `
+      <div class="cart-item">
+        <div style="flex:1;"><div class="cart-item-name">${item.nombre}</div><div class="cart-item-unit">$${item.precioUnitario.toLocaleString('es-AR')} c/u</div></div>
+        <div class="qty-ctrl">
+          <button class="qty-btn" onclick="changeQty('${item.id}',-1)" aria-label="Restar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+          <span class="qty-val">${item.cantidad}</span>
+          <button class="qty-btn" onclick="changeQty('${item.id}',1)" aria-label="Sumar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        </div>
+        <div class="cart-item-total">$${(item.precioUnitario*item.cantidad).toLocaleString('es-AR')}</div>
+        <button class="remove-btn" onclick="removeFromCart('${item.id}')" aria-label="Quitar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>`).join('');
+  }
+  document.getElementById('total-val').textContent = '$' + getTotal().toLocaleString('es-AR');
+  renderNetoEstimado();
+  updateConfirmBtn();
+}
+
+function renderNetoEstimado(){
+  const row = document.getElementById('neto-row');
+  if(!selectedPayment){ row.style.display = 'none'; return; }
+  const pct = configTaxes[selectedPayment] ?? 0;
+  const total = getTotal();
+  const neto = Math.round(total * (1 - pct/100));
+  document.getElementById('neto-val').textContent = '$' + neto.toLocaleString('es-AR') + (pct>0 ? ' ('+pct+'% desc.)' : '');
+  row.style.display = pct > 0 ? 'flex' : 'none';
+}
+
+function selectPay(el){
+  document.querySelectorAll('.pay-btn').forEach(b=>b.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedPayment = el.dataset.pay;
+  renderNetoEstimado();
+  updateConfirmBtn();
+}
+function updateConfirmBtn(){ document.getElementById('confirm-btn').disabled = !(cart.length > 0 && selectedPayment); }
+
+function confirmarVenta(){
+  const pct = configTaxes[selectedPayment] ?? 0;
+  const total = getTotal();
+  const neto = Math.round(total * (1 - pct/100));
+  const venta = {
+    id: 'V-' + Date.now(),
+    fecha: new Date().toISOString(),
+    items: cart.map(c => ({producto_id: c.id, nombre: c.nombre, categoria: c.categoria, marca: c.marca, cantidad: c.cantidad, precio_unitario: c.precioUnitario})),
+    subtotal: getSubtotal(), descuento_pct: getDescuentoPct(), total: total, medio_pago: selectedPayment,
+    impuesto_pct: pct, neto_estimado: neto,
+  };
+  ventasGuardadas.push(venta);
+  saveVentas();
+  saveVentaToBackend(venta);
+  showToast('Venta registrada: $' + venta.total.toLocaleString('es-AR'));
+  cart = []; selectedPayment = null;
+  document.getElementById('descuento-input').value = '';
+  document.querySelectorAll('.pay-btn').forEach(b=>b.classList.remove('selected'));
+  renderCart();
+}
+
+function showToast(msg){
+  const toast = document.getElementById('toast');
+  toast.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' + msg;
+  toast.classList.add('show');
+  setTimeout(()=>{ toast.classList.remove('show'); }, 2400);
+}
+
+/* ---------- DASHBOARD ---------- */
+let chartIE=null, chartCat=null, chartPay=null;
+
+function setDashPeriod(el){
+  document.querySelectorAll('#dash-period-toggle .period-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  dashPeriodDays = el.dataset.period === 'all' ? null : parseInt(el.dataset.period);
+  renderDashboard();
+}
+
+function filterByPeriod(items, dateField, days){
+  if(days === null) return items;
+  const cutoff = new Date(Date.now() - days*24*60*60*1000);
+  return items.filter(it => new Date(it[dateField]) >= cutoff);
+}
+
+function renderDashboard(){
+  const ventas = filterByPeriod(getAllVentas(), 'fecha', dashPeriodDays);
+  const rangeEnd = new Date();
+  const rangeStart = dashPeriodDays === null
+    ? new Date(Math.min(...[...VENTAS_HISTORICAS, ...ventasGuardadas, ...GASTOS_HISTORICOS].map(x=>new Date(x.fecha).getTime()), Date.now()))
+    : new Date(Date.now() - dashPeriodDays*24*60*60*1000);
+  const gastos = getAllGastos(rangeStart, rangeEnd);
+
+  const totalIngresos = ventas.reduce((s,v)=>s+v.total,0);
+  const totalEgresos = gastos.reduce((s,g)=>s+g.monto,0);
+  const neto = totalIngresos - totalEgresos;
+  const ticketProm = ventas.length ? Math.round(totalIngresos/ventas.length) : 0;
+
+  document.getElementById('dash-metric-grid').innerHTML = `
+    <div class="metric-card"><div class="metric-label">Ingresos</div><div class="metric-val small">$${totalIngresos.toLocaleString('es-AR')}</div><div class="metric-sub">${ventas.length} ventas</div></div>
+    <div class="metric-card"><div class="metric-label">Egresos</div><div class="metric-val small">$${totalEgresos.toLocaleString('es-AR')}</div><div class="metric-sub">${gastos.length} movimientos</div></div>
+    <div class="metric-card"><div class="metric-label">Resultado neto</div><div class="metric-val small">$${neto.toLocaleString('es-AR')}</div><div class="metric-sub ${neto>=0?'good':'bad'}">${neto>=0?'Positivo':'Negativo'}</div></div>
+    <div class="metric-card"><div class="metric-label">Ticket promedio</div><div class="metric-val small">$${ticketProm.toLocaleString('es-AR')}</div><div class="metric-sub">por venta</div></div>
+  `;
+
+  renderChartIngresosEgresos(ventas, gastos);
+  renderChartCategorias(ventas);
+  renderChartMediosPago(ventas);
+  renderTopProductsDash(ventas);
+}
+
+function groupByMonth(items, dateField, valueFn){
+  const map = {};
+  items.forEach(it => {
+    const d = new Date(it[dateField]);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    map[key] = (map[key]||0) + valueFn(it);
+  });
+  return map;
+}
+
+function renderChartIngresosEgresos(ventas, gastos){
+  const ingMap = groupByMonth(ventas, 'fecha', v=>v.total);
+  const egMap = groupByMonth(gastos, 'fecha', g=>g.monto);
+  const allKeys = Array.from(new Set([...Object.keys(ingMap), ...Object.keys(egMap)])).sort();
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const labels = allKeys.map(k => { const [y,m] = k.split('-'); return meses[parseInt(m)-1]+' '+y.slice(2); });
+  const ingData = allKeys.map(k => Math.round(ingMap[k]||0));
+  const egData = allKeys.map(k => Math.round(egMap[k]||0));
+
+  document.getElementById('ie-legend').innerHTML = `
+    <span class="legend-dot"><span class="legend-sw" style="background:${COLOR_INGRESO};"></span>Ingresos</span>
+    <span class="legend-dot"><span class="legend-sw" style="background:${COLOR_EGRESO};"></span>Egresos</span>
+  `;
+
+  if(chartIE) chartIE.destroy();
+  chartIE = new Chart(document.getElementById('chartIngresosEgresos'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { label:'Ingresos', data: ingData, borderColor: COLOR_INGRESO, backgroundColor: COLOR_INGRESO+'22', fill:true, tension:0.3, pointRadius:3 },
+      { label:'Egresos', data: egData, borderColor: COLOR_EGRESO, backgroundColor: COLOR_EGRESO+'22', fill:true, tension:0.3, pointRadius:3, borderDash:[5,3] },
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: c => c.dataset.label+': $'+c.parsed.y.toLocaleString('es-AR') } } },
+      scales:{ y:{ ticks:{ callback: v => '$'+(v/1000)+'k' } }, x:{ ticks:{ autoSkip:false } } }
+    }
+  });
+}
+
+function renderChartCategorias(ventas){
+  const catTotals = {};
+  ventas.forEach(v => v.items.forEach(it => { catTotals[it.categoria] = (catTotals[it.categoria]||0) + it.precio_unitario*it.cantidad; }));
+  const sorted = Object.entries(catTotals).sort((a,b)=>b[1]-a[1]);
+  const labels = sorted.map(s=>s[0]);
+  const data = sorted.map(s=>Math.round(s[1]));
+
+  if(chartCat) chartCat.destroy();
+  chartCat = new Chart(document.getElementById('chartCategorias'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label:'Ventas', data, backgroundColor: PALETTE[0], borderRadius:5 }] },
+    options: {
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: c => '$'+c.parsed.x.toLocaleString('es-AR') } } },
+      scales:{ x:{ ticks:{ callback: v => '$'+(v/1000)+'k' } } }
+    }
+  });
+}
+
+function renderChartMediosPago(ventas){
+  const payTotals = {};
+  ventas.forEach(v => { const pago = v.medio_pago || 'Histórico'; payTotals[pago] = (payTotals[pago]||0) + v.total; });
+  const sorted = Object.entries(payTotals).sort((a,b)=>b[1]-a[1]);
+  const labels = sorted.map(s=>s[0]);
+  const data = sorted.map(s=>Math.round(s[1]));
+  const total = data.reduce((a,b)=>a+b,0);
+  const colors = labels.map((_,i)=>PALETTE[i % PALETTE.length]);
+
+  document.getElementById('pay-legend').innerHTML = labels.map((l,i)=>{
+    const pct = total ? Math.round(data[i]/total*100) : 0;
+    return `<span class="legend-dot"><span class="legend-sw" style="background:${colors[i]};"></span>${l} ${pct}%</span>`;
+  }).join('');
+
+  if(chartPay) chartPay.destroy();
+  chartPay = new Chart(document.getElementById('chartMediosPago'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth:2, borderColor:'#fff' }] },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: c => c.label+': $'+c.parsed.toLocaleString('es-AR') } } }
+    }
+  });
+}
+
+function renderTopProductsDash(ventas){
+  const productCounts = {};
+  ventas.forEach(v => v.items.forEach(it => {
+    if(!productCounts[it.nombre]) productCounts[it.nombre] = {cantidad:0, monto:0};
+    productCounts[it.nombre].cantidad += it.cantidad;
+    productCounts[it.nombre].monto += it.precio_unitario * it.cantidad;
+  }));
+  const topList = Object.entries(productCounts).sort((a,b)=>b[1].cantidad-a[1].cantidad).slice(0,10);
+  const topEl = document.getElementById('top-products');
+  if(topList.length===0){
+    topEl.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg><div>Sin datos en este período</div></div>`;
+  }else{
+    topEl.innerHTML = topList.map(([nombre,data],i)=>`
+      <div class="rank-item">
+        <div class="rank-num">${i+1}</div>
+        <div style="flex:1;"><div class="rank-name">${nombre}</div><div class="rank-meta">${data.cantidad} unidades vendidas</div></div>
+        <div class="rank-val">$${Math.round(data.monto).toLocaleString('es-AR')}</div>
+      </div>`).join('');
+  }
+}
+
+/* ---------- ESTADOS CONTABLES ---------- */
+function setEstadoMode(el){
+  document.querySelectorAll('#view-estados .period-toggle .period-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  estadoMode = el.dataset.mode;
+  renderEstados();
+}
+
+function getAvailableYears(){
+  const allDates = [...getAllVentas().map(v=>v.fecha), ...GASTOS_HISTORICOS.map(g=>g.fecha)];
+  const years = new Set(allDates.map(d => new Date(d).getFullYear()));
+  return Array.from(years).sort();
+}
+
+function quarterRange(year, q){
+  const startMonth = (q-1)*3;
+  const start = new Date(year, startMonth, 1);
+  const end = new Date(year, startMonth+3, 1);
+  return [start, end];
+}
+function yearRange(year){
+  return [new Date(year,0,1), new Date(year+1,0,1)];
+}
+
+function renderEstados(){
+  const years = getAvailableYears();
+  if(years.length===0){ years.push(new Date().getFullYear()); }
+  if(!years.includes(estadoYear)) estadoYear = years[years.length-1];
+
+  document.getElementById('estados-year-select').innerHTML = years.map(y =>
+    `<button class="filter-chip ${y===estadoYear?'active':''}" onclick="setEstadoYear(${y})">${y}</button>`
+  ).join('');
+
+  const qGrid = document.getElementById('estados-quarter-grid');
+  if(estadoMode === 'trimestral'){
+    qGrid.style.display = 'grid';
+    const labels = ['T1 · Ene-Mar','T2 · Abr-Jun','T3 · Jul-Sep','T4 · Oct-Dic'];
+    qGrid.innerHTML = labels.map((l,i) => {
+      const q = i+1;
+      const [start,end] = quarterRange(estadoYear, q);
+      const ventasQ = getAllVentas().filter(v => { const d=new Date(v.fecha); return d>=start && d<end; });
+      const totalQ = ventasQ.reduce((s,v)=>s+v.total,0);
+      return `<div class="quarter-card ${q===estadoQuarter?'active':''}" onclick="setEstadoQuarter(${q})">
+        <div class="q-label">${l}</div>
+        <div class="q-val">$${Math.round(totalQ).toLocaleString('es-AR')}</div>
+      </div>`;
+    }).join('');
+  }else{
+    qGrid.style.display = 'none';
+  }
+
+  let start, end, titulo;
+  if(estadoMode === 'trimestral'){
+    [start, end] = quarterRange(estadoYear, estadoQuarter);
+    titulo = `Estado de resultados — T${estadoQuarter} ${estadoYear}`;
+  }else{
+    [start, end] = yearRange(estadoYear);
+    titulo = `Estado de resultados — Ejercicio ${estadoYear} (cierre 31/12)`;
+  }
+  document.getElementById('estado-titulo').textContent = titulo;
+
+  const ventasP = getAllVentas().filter(v => { const d=new Date(v.fecha); return d>=start && d<end; });
+  const gastosP = getAllGastos(start, end).filter(g => { const d=new Date(g.fecha); return d>=start && d<end; });
+
+  const ingresoBruto = ventasP.reduce((s,v)=>s+v.subtotal,0);
+  const descuentos = ventasP.reduce((s,v)=>s+(v.subtotal-v.total),0);
+  const ingresoNeto = ingresoBruto - descuentos;
+
+  const gastosPorCat = {};
+  gastosP.forEach(g => { gastosPorCat[g.categoria] = (gastosPorCat[g.categoria]||0) + g.monto; });
+  const totalEgresos = gastosP.reduce((s,g)=>s+g.monto,0);
+  const resultado = ingresoNeto - totalEgresos;
+
+  let rows = `
+    <tr><td>Ventas brutas</td><td>$${Math.round(ingresoBruto).toLocaleString('es-AR')}</td></tr>
+    <tr class="indent neg"><td>(–) Descuentos otorgados</td><td>-$${Math.round(descuentos).toLocaleString('es-AR')}</td></tr>
+    <tr class="subtotal"><td>Ingresos netos</td><td>$${Math.round(ingresoNeto).toLocaleString('es-AR')}</td></tr>
+  `;
+  Object.entries(gastosPorCat).sort((a,b)=>b[1]-a[1]).forEach(([cat,monto]) => {
+    rows += `<tr class="indent neg"><td>(–) ${cat}</td><td>-$${Math.round(monto).toLocaleString('es-AR')}</td></tr>`;
+  });
+  rows += `<tr class="subtotal"><td>Egresos totales</td><td>-$${Math.round(totalEgresos).toLocaleString('es-AR')}</td></tr>`;
+  rows += `<tr class="total"><td>Resultado del período</td><td style="color:${resultado>=0?'var(--good)':'var(--bad)'}">${resultado>=0?'':'-'}$${Math.abs(Math.round(resultado)).toLocaleString('es-AR')}</td></tr>`;
+
+  document.getElementById('estado-tabla').innerHTML = rows;
+
+  const catEl = document.getElementById('estado-egresos-cat');
+  const catList = Object.entries(gastosPorCat).sort((a,b)=>b[1]-a[1]);
+  if(catList.length===0){
+    catEl.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><div>Sin egresos registrados en este período</div></div>';
+  }else{
+    const maxVal = catList[0][1];
+    catEl.innerHTML = catList.map(([cat,monto])=>`
+      <div class="cat-row">
+        <div class="cat-row-top"><span class="cat-row-name">${cat}</span><span class="cat-row-val">$${Math.round(monto).toLocaleString('es-AR')}</span></div>
+        <div class="cat-bar-bg"><div class="cat-bar-fill" style="width:${(monto/maxVal*100)}%;background:var(--coral);"></div></div>
+      </div>`).join('');
+  }
+}
+
+function setEstadoYear(y){ estadoYear = y; renderEstados(); }
+function setEstadoQuarter(q){ estadoQuarter = q; renderEstados(); }
+
+/* ---------- SALUD FINANCIERA ---------- */
+function sumVentasEntre(start, end){ return getAllVentas().filter(v=>{const d=new Date(v.fecha);return d>=start&&d<end;}).reduce((s,v)=>s+v.total,0); }
+function sumGastosEntre(start, end){ return getAllGastos(start, end).filter(g=>{const d=new Date(g.fecha);return d>=start&&d<end;}).reduce((s,g)=>s+g.monto,0); }
+
+function pctChange(curr, prev){
+  if(prev === 0) return curr === 0 ? 0 : 100;
+  return Math.round(((curr-prev)/Math.abs(prev))*100);
+}
+
+function healthBanner(label, curr, prev, contextoTexto){
+  const change = pctChange(curr, prev);
+  let level = 'good', title = 'Buen ritmo';
+  const icon = {
+    good: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>',
+    bad: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+  };
+  let text = '';
+  if(curr <= 0 && prev <= 0){
+    level='warn'; title='Sin actividad';
+    text = `No se registraron ${contextoTexto} en este período ni en el anterior.`;
+  }else if(change >= 5){
+    level='good'; title='En alza';
+    text = `${label} de $${Math.round(curr).toLocaleString('es-AR')}, ${change}% más que el período anterior ($${Math.round(prev).toLocaleString('es-AR')}).`;
+  }else if(change <= -15){
+    level='bad'; title='Caída marcada';
+    text = `${label} de $${Math.round(curr).toLocaleString('es-AR')}, ${Math.abs(change)}% menos que el período anterior ($${Math.round(prev).toLocaleString('es-AR')}). Vale la pena revisar qué cambió.`;
+  }else if(change < 0){
+    level='warn'; title='Leve baja';
+    text = `${label} de $${Math.round(curr).toLocaleString('es-AR')}, ${Math.abs(change)}% menos que el período anterior. Dentro de un rango normal de variación.`;
+  }else{
+    level='good'; title='Estable';
+    text = `${label} de $${Math.round(curr).toLocaleString('es-AR')}, similar al período anterior ($${Math.round(prev).toLocaleString('es-AR')}).`;
+  }
+  return `<div class="health-banner ${level}">
+    <div class="health-icon">${icon[level]}</div>
+    <div><div class="health-title">${title}</div><div class="health-text">${text}</div></div>
+  </div>`;
+}
+
+function renderSalud(){
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(todayStart.getTime() + 24*60*60*1000);
+  const yestStart = new Date(todayStart.getTime() - 24*60*60*1000);
+
+  const ingHoy = sumVentasEntre(todayStart, todayEnd);
+  const ingAyer = sumVentasEntre(yestStart, todayStart);
+  const egHoy = sumGastosEntre(todayStart, todayEnd);
+
+  document.getElementById('salud-hoy').innerHTML =
+    healthBanner('Ingresos de hoy', ingHoy, ingAyer, 'ventas') +
+    (egHoy>0 ? `<p style="font-size:13px;color:var(--ink-soft);margin-top:-4px;">También se registraron $${Math.round(egHoy).toLocaleString('es-AR')} en egresos hoy.</p>` : '');
+
+  const dow = (now.getDay()+6)%7;
+  const weekStart = new Date(todayStart.getTime() - dow*24*60*60*1000);
+  const prevWeekStart = new Date(weekStart.getTime() - 7*24*60*60*1000);
+
+  const ingSemana = sumVentasEntre(weekStart, now);
+  const ingSemanaPrev = sumVentasEntre(prevWeekStart, weekStart);
+  document.getElementById('salud-semana').innerHTML = healthBanner('Ingresos de esta semana', ingSemana, ingSemanaPrev, 'ventas');
+
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  const ingMes = sumVentasEntre(monthStart, now);
+  const ingMesPrev = sumVentasEntre(prevMonthStart, monthStart);
+  const egMes = sumGastosEntre(monthStart, now);
+  const egMesPrev = sumGastosEntre(prevMonthStart, monthStart);
+  const netoMes = ingMes - egMes;
+  const netoMesPrev = ingMesPrev - egMesPrev;
+
+  document.getElementById('salud-mes').innerHTML =
+    healthBanner('Ingresos de este mes', ingMes, ingMesPrev, 'ventas') +
+    healthBanner('Resultado neto de este mes', netoMes, netoMesPrev, 'movimientos');
+}
+
+/* ---------- HISTORIAL ---------- */
+function setHistFilter(el){
+  document.querySelectorAll('.filter-chip[data-filter]').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  histFilter = el.dataset.filter;
+  renderHistory();
+}
+
+function renderHistory(){
+  const hoy = new Date();
+  const hoyStr = hoy.toDateString();
+  const semanaAtras = new Date(hoy.getTime() - 7*24*60*60*1000);
+  let filtered = [...ventasGuardadas].reverse();
+  if(histFilter==='hoy') filtered = filtered.filter(v => new Date(v.fecha).toDateString()===hoyStr);
+  if(histFilter==='semana') filtered = filtered.filter(v => new Date(v.fecha) >= semanaAtras);
+
+  const container = document.getElementById('history-list');
+  if(filtered.length===0){
+    container.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><div>No hay ventas registradas en este período</div></div>`;
+    return;
+  }
+  container.innerHTML = filtered.map(v => {
+    const fecha = new Date(v.fecha);
+    const fechaStr = fecha.toLocaleDateString('es-AR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+    const itemsStr = v.items.map(it => `${it.cantidad>1?it.cantidad+'x ':''}${it.nombre}`).join(', ');
+    return `<div class="history-item"><div style="flex:1;"><div class="history-date">${fechaStr} · ${v.medio_pago}</div><div class="history-desc">${itemsStr}</div></div><div class="history-amt">$${v.total.toLocaleString('es-AR')}</div></div>`;
+  }).join('');
+}
+
+async function connectBackend(){
+  const url = document.getElementById('backend-url-input').value.trim().replace(/\/$/, '');
+  if(!url){ showToast('Ingresá una URL válida'); return; }
+  setBackendURL(url);
+  document.getElementById('backend-status').textContent = 'Probando conexión...';
+  try{
+    const res = await fetch(url + '/health');
+    if(res.ok){
+      backendConnected = true;
+      updateConnectionBadge(true);
+      document.getElementById('backend-status').textContent = '✓ Conectado correctamente a ' + url;
+      showToast('Backend conectado');
+      await loadVentas();
+      await loadConfig();
+    }else{
+      throw new Error('Respuesta no OK');
+    }
+  }catch(e){
+    backendConnected = false;
+    updateConnectionBadge(false);
+    document.getElementById('backend-status').textContent = '✗ No se pudo conectar. Verificá la URL.';
+  }
+}
+
+renderCart();
+(async () => {
+  // Load backend URL if saved
+  const savedURL = getBackendURL();
+  if(savedURL){
+    const input = document.getElementById('backend-url-input');
+    if(input) input.value = savedURL;
+  }
+  await loadVentas();
+  await loadConfig();
+})();
+</script>
+</body>
+</html>
