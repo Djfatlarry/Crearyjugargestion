@@ -29,20 +29,38 @@ function write(name, data) {
 // ─── LOAD INITIAL CATALOG FROM BUNDLED JSON ──────────────────────────────────
 const CATALOG_SOURCE = path.join(__dirname, 'proveedores_catalogo.json');
 function initCatalog() {
-  const catalogPath = dbPath('proveedores');
-  if (!fs.existsSync(catalogPath) && fs.existsSync(CATALOG_SOURCE)) {
-    const raw = JSON.parse(fs.readFileSync(CATALOG_SOURCE, 'utf8'));
-    // Add validado field and id
-    const withMeta = raw.map((p, i) => ({
-      id: `PROV-${String(i+1).padStart(5,'0')}`,
-      ...p,
-      validado: false,
-      precio_venta: p.precio_publico,
-      updated_at: new Date().toISOString()
-    }));
-    write('proveedores', withMeta);
-    console.log(`Catálogo inicializado: ${withMeta.length} productos`);
-  }
+  if (!fs.existsSync(CATALOG_SOURCE)) return;
+  const existing = read('proveedores');
+  const existingList = Array.isArray(existing) ? existing : Object.values(existing);
+  if (existingList.length > 0) return; // already loaded
+  const raw = JSON.parse(fs.readFileSync(CATALOG_SOURCE, 'utf8'));
+  const withMeta = raw.map((p, i) => ({
+    id: `PROV-${String(i+1).padStart(5,'0')}`,
+    ...p,
+    validado: false,
+    precio_venta: p.precio_publico,
+    updated_at: new Date().toISOString()
+  }));
+  write('proveedores', withMeta);
+  console.log(`Catálogo inicializado: ${withMeta.length} productos`);
+}
+
+// Also expose a force-reload endpoint
+function reloadCatalog() {
+  if (!fs.existsSync(CATALOG_SOURCE)) return 0;
+  const raw = JSON.parse(fs.readFileSync(CATALOG_SOURCE, 'utf8'));
+  const existing = read('proveedores');
+  const existingList = Array.isArray(existing) ? existing : Object.values(existing);
+  const existingMap = {};
+  existingList.forEach(p => { existingMap[p.id] = p; });
+  const withMeta = raw.map((p, i) => {
+    const id = `PROV-${String(i+1).padStart(5,'0')}`;
+    return existingMap[id] ? { ...existingMap[id], precio_costo: p.precio_costo, precio_publico: p.precio_publico } : {
+      id, ...p, validado: false, precio_venta: p.precio_publico, updated_at: new Date().toISOString()
+    };
+  });
+  write('proveedores', withMeta);
+  return withMeta.length;
 }
 initCatalog();
 
@@ -51,7 +69,12 @@ function ok(res, data) { res.json({ ok: true, ...data }); }
 function err(res, msg, status = 500) { res.status(status).json({ ok: false, error: msg }); }
 
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
-app.get('/health', (_, res) => res.json({ ok: true, version: '2.0.0' }));
+app.get('/health', (_, res) => res.json({ ok: true, version: '2.0.1' }));
+
+app.post('/admin/reload-catalog', (_, res) => {
+  const count = reloadCatalog();
+  ok(res, { reloaded: count });
+});
 
 // ─── VENTAS ──────────────────────────────────────────────────────────────────
 app.get('/ventas', (_, res) => {
