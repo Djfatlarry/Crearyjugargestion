@@ -138,8 +138,8 @@ app.get('/proveedores', async (req, res) => {
 });
 app.get('/proveedores/list', async (_, res) => {
   try {
-    const d = await sb('GET', 'proveedores', { select: 'proveedor' });
-    const provs = [...new Set((d || []).map(p => p.proveedor))].sort();
+    const d = await sb('GET', 'proveedores', { select: 'proveedor', limit: 5000 });
+    const provs = [...new Set((d || []).map(p => p.proveedor))].filter(Boolean).sort();
     ok(res, { proveedores: provs });
   } catch (e) { err(res, e.message); }
 });
