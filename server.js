@@ -2,6 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
+const XLSX = require('xlsx');
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 const app = express();
 app.use(cors());
@@ -203,7 +207,146 @@ app.patch('/productos-pendientes/:id', async (req, res) => {
   catch (e) { err(res, e.message); }
 });
 
-// ADMIN
+// ─── CARGA INTELIGENTE DE LISTA DE PROVEEDOR (con IA) ────────────────────────
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+app.post('/proveedores/upload-excel', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return err(res, 'No se recibió ningún archivo', 400);
+    const proveedorNombre = req.body.proveedor;
+    if (!proveedorNombre) return err(res, 'Falta el nombre del proveedor', 400);
+    if (!ANTHROPIC_API_KEY) return err(res, 'Falta configurar ANTHROPIC_API_KEY en el servidor', 500);
+
+    // Parse Excel/CSV into raw rows
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+    if (!rows.length) return err(res, 'El archivo está vacío', 400);
+
+    // Take a sample (first 30 non-empty rows) to send to Claude for column detection
+    const nonEmptyRows = rows.filter(r => r.some(c => c !== '' && c !== null));
+    const sampleRows = nonEmptyRows.slice(0, 30);
+    const sampleText = sampleRows.map((r, i) => `Fila ${i}: ${JSON.stringify(r)}`).join('\n');
+
+    const prompt = `Estoy procesando una lista de precios de un proveedor de jugueterías en formato Excel. Te paso las primeras filas (cada una es un array de celdas por columna, indexadas desde 0).
+
+${sampleText}
+
+Identificá:
+1. El número de fila donde empiezan los datos reales de productos (después de headers/títulos)
+2. El índice de columna (0-indexed) que contiene el NOMBRE del producto
+3. El índice de columna que contiene el CÓDIGO/SKU del producto (si existe, sino null)
+4. El índice de columna que contiene el PRECIO DE COSTO (precio al que el proveedor vende, sin margen)
+5. El índice de columna que contiene el PRECIO PÚBLICO o PRECIO DE VENTA SUGERIDO (si existe, sino null)
+6. Tu nivel de confianza (alto/medio/bajo) en esta detección
+
+Respondé ÚNICAMENTE con un JSON válido, sin texto adicional, con esta estructura exacta:
+{"fila_inicio": 0, "col_nombre": 0, "col_codigo": null, "col_costo": 0, "col_publico": null, "confianza": "alto"}`;
+
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!aiRes.ok) {
+      const t = await aiRes.text();
+      return err(res, `Error llamando a la IA: ${aiRes.status} ${t}`);
+    }
+    const aiData = await aiRes.json();
+    const aiText = aiData.content?.[0]?.text || '';
+    let mapping;
+    try {
+      const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+      mapping = JSON.parse(jsonMatch ? jsonMatch[0] : aiText);
+    } catch (e) {
+      return err(res, 'No se pudo interpretar la respuesta de la IA: ' + aiText.slice(0, 200));
+    }
+
+    const { fila_inicio, col_nombre, col_codigo, col_costo, col_publico, confianza } = mapping;
+    const necesitaRevision = confianza !== 'alto';
+
+    // Extract products using detected mapping
+    const productos = [];
+    for (let i = fila_inicio; i < nonEmptyRows.length; i++) {
+      const row = nonEmptyRows[i];
+      const nombre = col_nombre !== null && row[col_nombre] ? String(row[col_nombre]).trim() : '';
+      if (!nombre || nombre.length < 2) continue;
+      const parseNum = (v) => {
+        if (v === null || v === undefined || v === '') return null;
+        if (typeof v === 'number') return v;
+        const s = String(v).replace(/[^0-9.,]/g, '').replace(',', '.');
+        const n = parseFloat(s);
+        return isNaN(n) ? null : n;
+      };
+      const costo = col_costo !== null ? parseNum(row[col_costo]) : null;
+      const publico = col_publico !== null ? parseNum(row[col_publico]) : null;
+      if (!costo && !publico) continue;
+      productos.push({
+        proveedor: proveedorNombre,
+        codigo: col_codigo !== null ? String(row[col_codigo] || '').trim() : '',
+        nombre,
+        precio_costo: costo,
+        precio_publico: publico || (costo ? Math.round(costo * 2.2) : null),
+        precio_venta: publico || (costo ? Math.round(costo * 2.2) : null),
+        categoria: '',
+      });
+    }
+
+    if (!productos.length) {
+      return err(res, 'No se pudieron extraer productos. Revisá el formato del archivo o probá con otra hoja.');
+    }
+
+    // Upsert into Supabase: match by proveedor + nombre, update if exists, insert if new
+    const existing = await sb('GET', 'proveedores', { filter: `proveedor=eq.${encodeURIComponent(proveedorNombre)}`, select: 'id,nombre', limit: 5000 });
+    const existingMap = {};
+    (existing || []).forEach(p => { existingMap[p.nombre.toLowerCase().trim()] = p.id; });
+
+    let added = 0, updated = 0;
+    const toInsert = [];
+    const toUpdate = [];
+    productos.forEach(p => {
+      const key = p.nombre.toLowerCase().trim();
+      if (existingMap[key]) {
+        toUpdate.push({ id: existingMap[key], ...p, validado: necesitaRevision ? false : undefined, updated_at: new Date().toISOString() });
+        updated++;
+      } else {
+        toInsert.push({ id: `PROV-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, ...p, validado: false, manual: false, updated_at: new Date().toISOString() });
+        added++;
+      }
+    });
+
+    if (toInsert.length) {
+      for (let i = 0; i < toInsert.length; i += 100) {
+        await sb('POST', 'proveedores', { body: toInsert.slice(i, i+100), prefer: 'resolution=ignore-duplicates,return=minimal' });
+      }
+    }
+    for (const u of toUpdate) {
+      const { id, ...changes } = u;
+      await sb('PATCH', `proveedores?id=eq.${id}`, { body: changes, prefer: 'return=minimal' }).catch(() => {});
+    }
+
+    ok(res, {
+      added, updated, total: productos.length,
+      confianza, necesita_revision: necesitaRevision,
+      mapping_usado: mapping,
+    });
+  } catch (e) {
+    err(res, 'Error procesando archivo: ' + e.message);
+  }
+});
+
+
 app.get('/admin/summary', async (_, res) => {
   try {
     const [v, g, p, pend] = await Promise.all([
