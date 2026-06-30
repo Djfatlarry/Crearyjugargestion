@@ -267,10 +267,19 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional, con esta estruct
     const aiText = aiData.content?.[0]?.text || '';
     let mapping;
     try {
-      const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-      mapping = JSON.parse(jsonMatch ? jsonMatch[0] : aiText);
+      // Try to extract JSON from response more robustly
+      let jsonStr = aiText.trim();
+      const jsonMatch = aiText.match(/\{[\s\S]*?\}/);
+      if (jsonMatch) jsonStr = jsonMatch[0];
+      // Remove any trailing commas before closing braces (common AI mistake)
+      jsonStr = jsonStr.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+      try {
+        mapping = JSON.parse(jsonStr);
+      } catch(parseErr) {
+        return err(res, `No se pudo parsear respuesta de IA. Respuesta recibida: ${aiText.slice(0,300)}`);
+      }
     } catch (e) {
-      return err(res, 'No se pudo interpretar la respuesta de la IA: ' + aiText.slice(0, 200));
+      return err(res, 'No se pudo interpretar la respuesta de la IA: ' + e.message);
     }
 
     const { fila_inicio, col_nombre, col_codigo, col_costo, col_publico, confianza } = mapping;
