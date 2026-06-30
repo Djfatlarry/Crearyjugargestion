@@ -17,13 +17,14 @@ async function sb(method, table, opts = {}) {
     'Authorization': `Bearer ${SUPABASE_KEY}`,
     'Content-Type': 'application/json',
     'Prefer': opts.prefer || '',
+    'Range-Unit': 'items',
+    'Range': `0-${opts.limit || 9999}`,
   };
   if (opts.select) url += `?select=${opts.select}`;
   if (opts.filter) url += (url.includes('?') ? '&' : '?') + opts.filter;
   if (opts.order) url += (url.includes('?') ? '&' : '?') + `order=${opts.order}`;
-  if (opts.limit) url += (url.includes('?') ? '&' : '?') + `limit=${opts.limit}`;
   const res = await fetch(url, { method, headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
-  if (!res.ok) { const t = await res.text(); throw new Error(`Supabase ${method} ${table}: ${res.status} ${t}`); }
+  if (!res.ok && res.status !== 206) { const t = await res.text(); throw new Error(`Supabase ${method} ${table}: ${res.status} ${t}`); }
   if (res.status === 204) return null;
   return res.json();
 }
