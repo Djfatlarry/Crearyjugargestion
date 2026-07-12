@@ -219,14 +219,25 @@ app.post('/proveedores/upload-excel', upload.single('file'), async (req, res) =>
 
     // Parse Excel/CSV into raw rows
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    // Try all sheets, pick the one with most non-empty rows
+    let bestRows = [];
+    let bestSheet = workbook.SheetNames[0];
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      const nonEmpty = rows.filter(r => r.some(c => c !== '' && c !== null));
+      if (nonEmpty.length > bestRows.length) {
+        bestRows = nonEmpty;
+        bestSheet = sheetName;
+      }
+    }
+    const rows = bestRows;
+    console.log(`Usando hoja: ${bestSheet} (${rows.length} filas con datos)`);
 
     if (!rows.length) return err(res, 'El archivo está vacío', 400);
 
     // Take a sample (first 30 non-empty rows) to send to Claude for column detection
-    const nonEmptyRows = rows.filter(r => r.some(c => c !== '' && c !== null));
+    const nonEmptyRows = rows; // already filtered above
     const sampleRows = nonEmptyRows.slice(0, 30);
     const sampleText = sampleRows.map((r, i) => `Fila ${i}: ${JSON.stringify(r)}`).join('\n');
 
@@ -316,6 +327,23 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
 
     if (!productos.length) {
       return err(res, 'No se pudieron extraer productos. Revisá el formato del archivo o probá con otra hoja.');
+    }
+
+    // Detect if prices are in thousands (e.g. 11.5 instead of 11500)
+    // Use median to avoid outliers skewing the detection
+    const precios = productos.map(p => p.precio_publico || p.precio_costo || 0).filter(p => p > 0 && p < 10000);
+    if (precios.length > 0) {
+      const sorted = [...precios].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      if (median < 500) {
+        console.log(`Precios en miles detectados (mediana: ${median}), multiplicando x1000`);
+        productos.forEach(p => {
+          // Only multiply prices that are clearly in the "thousands" range (< 2000)
+          if (p.precio_costo && p.precio_costo < 2000) p.precio_costo = Math.round(p.precio_costo * 1000);
+          if (p.precio_publico && p.precio_publico < 2000) p.precio_publico = Math.round(p.precio_publico * 1000);
+          if (p.precio_venta && p.precio_venta < 2000) p.precio_venta = Math.round(p.precio_venta * 1000);
+        });
+      }
     }
 
     // Upsert into Supabase: match by proveedor + nombre, update if exists, insert if new
