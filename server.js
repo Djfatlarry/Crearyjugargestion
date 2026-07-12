@@ -230,19 +230,21 @@ app.post('/proveedores/upload-excel', upload.single('file'), async (req, res) =>
     const sampleRows = nonEmptyRows.slice(0, 30);
     const sampleText = sampleRows.map((r, i) => `Fila ${i}: ${JSON.stringify(r)}`).join('\n');
 
-    const prompt = `Estoy procesando una lista de precios de un proveedor de jugueterías en formato Excel. Te paso las primeras filas (cada una es un array de celdas por columna, indexadas desde 0).
+    const prompt = `Sos un asistente experto en listas de precios de proveedores de jugueterías en Argentina. Analizá estas filas de un archivo Excel e identificá las columnas clave.
 
+Filas del archivo (array de celdas, indexadas desde columna 0):
 ${sampleText}
 
-Identificá:
-1. El número de fila donde empiezan los datos reales de productos (después de headers/títulos)
-2. El índice de columna (0-indexed) que contiene el NOMBRE del producto
-3. El índice de columna que contiene el CÓDIGO/SKU del producto (si existe, sino null)
-4. El índice de columna que contiene el PRECIO DE COSTO (precio al que el proveedor vende, sin margen)
-5. El índice de columna que contiene el PRECIO PÚBLICO o PRECIO DE VENTA SUGERIDO (si existe, sino null)
-6. Tu nivel de confianza (alto/medio/bajo) en esta detección
+REGLAS para identificar cada columna:
+- NOMBRE del producto: buscá headers como "Descripción", "Artículo", "Producto", "Detalle", "Nombre", "Art.". Es la columna con TEXTO DESCRIPTIVO del juguete/producto. Suele ser la más larga en contenido.
+- PRECIO COSTO (precio del proveedor, sin margen): buscá "Neto", "Precio Lista", "P. Costo", "Costo", "Precio s/IVA", "Lista", "Precio Neto", "P/Mayor", "Mayorista". Es el número MÁS BAJO entre las columnas de precios.
+- PRECIO PÚBLICO (precio sugerido al consumidor): buscá "P. Público", "Público", "PVP", "Precio Público", "Precio Venta", "P.P.", "Precio Sugerido", "Minorista", "Consumidor Final". Es el número MÁS ALTO, generalmente entre 1.5x y 3x el precio de costo.
+- CÓDIGO/SKU: buscá "Código", "Cód", "SKU", "Art.", "Ref", "Artículo" cuando hay OTRA columna separada con el nombre del producto. Si el código y el artículo están en la misma columna, devolvé null para código.
+- fila_inicio: número de la primera fila con datos REALES de productos (saltando títulos, logos, headers vacíos, etc.). Contá desde 0.
 
-Respondé ÚNICAMENTE con un JSON válido, sin texto adicional, con esta estructura exacta:
+IMPORTANTE: Si hay solo UNA columna de precios, es el precio público (los proveedores a veces solo informan precio público). Si hay DOS columnas numéricas similares, la menor es costo y la mayor es público.
+
+Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
 {"fila_inicio": 0, "col_nombre": 0, "col_codigo": null, "col_costo": 0, "col_publico": null, "confianza": "alto"}`;
 
     const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
