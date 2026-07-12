@@ -53,10 +53,15 @@ app.post('/ventas/bulk', async (req, res) => {
   const { ventas } = req.body;
   if (!Array.isArray(ventas)) return err(res, 'array esperado', 400);
   try {
+    // Ensure items is properly serialized for Supabase JSONB
+    const normalized = ventas.map(v => ({
+      ...v,
+      items: typeof v.items === 'string' ? v.items : JSON.stringify(v.items)
+    }));
     let imported = 0;
-    for (let i = 0; i < ventas.length; i += 100) {
-      await sb('POST', 'ventas', { body: ventas.slice(i, i+100), prefer: 'resolution=ignore-duplicates,return=minimal' });
-      imported += Math.min(100, ventas.length - i);
+    for (let i = 0; i < normalized.length; i += 100) {
+      await sb('POST', 'ventas', { body: normalized.slice(i, i+100), prefer: 'resolution=ignore-duplicates,return=minimal' });
+      imported += Math.min(100, normalized.length - i);
     }
     ok(res, { imported });
   } catch (e) { err(res, e.message); }
