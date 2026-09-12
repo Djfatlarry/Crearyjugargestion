@@ -428,5 +428,6 @@ app.post('/admin/reload-catalog', async (_, res) => {
   } catch (e) { err(res, e.message); }
 });
 
+registrarReconciliacionTiendanube(app, sb); 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`CYJ backend v3.0 (Supabase) en puerto ${PORT}`));
