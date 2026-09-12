@@ -31,8 +31,9 @@ async function sb(method, table, opts = {}) {
   if (opts.order) url += (url.includes('?') ? '&' : '?') + `order=${opts.order}`;
   const res = await fetch(url, { method, headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
   if (!res.ok && res.status !== 206) { const t = await res.text(); throw new Error(`Supabase ${method} ${table}: ${res.status} ${t}`); }
-  if (res.status === 204) return null;
-  return res.json();
+  const text = await res.text();
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { return null; }
 }
 
 function ok(res, data) { res.json({ ok: true, ...data }); }
