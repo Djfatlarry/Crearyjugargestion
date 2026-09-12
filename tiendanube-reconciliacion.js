@@ -12,7 +12,7 @@
 //
 // No hace falta ninguna librería nueva ni tocar el resto de server.js.
 
- const TN_BASE = 'https://api.tiendanube.com/v1';';
+ const TN_BASE = 'https://api.tiendanube.com/v1';
 
 function tnHeaders() {
   return {
