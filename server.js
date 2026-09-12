@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const XLSX = require('xlsx');
+const registrarReconciliacionTiendanube = require('./tiendanube-reconciliacion');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
