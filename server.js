@@ -354,18 +354,31 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
       }
     }
 
-    // Upsert into Supabase: match by proveedor + nombre, update if exists, insert if new
-    const existing = await sb('GET', 'proveedores', { filter: `proveedor=eq.${encodeURIComponent(proveedorNombre)}`, select: 'id,nombre', limit: 5000 });
-    const existingMap = {};
-    (existing || []).forEach(p => { existingMap[p.nombre.toLowerCase().trim()] = p.id; });
+    // Upsert into Supabase: match por código (si existe) o por nombre normalizado, update si existe, insert si es nuevo
+    const normalizar = (s) => (s || '')
+      .toString()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // saca tildes
+      .toLowerCase()
+      .replace(/\s+/g, ' ') // colapsa espacios múltiples
+      .trim();
+
+    const existing = await sb('GET', 'proveedores', { filter: `proveedor=eq.${encodeURIComponent(proveedorNombre)}`, select: 'id,nombre,codigo', limit: 5000 });
+    const existingPorCodigo = {};
+    const existingPorNombre = {};
+    (existing || []).forEach(p => {
+      if (p.codigo && p.codigo.trim()) existingPorCodigo[p.codigo.trim().toLowerCase()] = p.id;
+      existingPorNombre[normalizar(p.nombre)] = p.id;
+    });
 
     let added = 0, updated = 0;
     const toInsert = [];
     const toUpdate = [];
     productos.forEach(p => {
-      const key = p.nombre.toLowerCase().trim();
-      if (existingMap[key]) {
-        toUpdate.push({ id: existingMap[key], ...p, validado: necesitaRevision ? false : undefined, updated_at: new Date().toISOString() });
+      const codigoKey = p.codigo && p.codigo.trim() ? p.codigo.trim().toLowerCase() : null;
+      const nombreKey = normalizar(p.nombre);
+      const idExistente = (codigoKey && existingPorCodigo[codigoKey]) || existingPorNombre[nombreKey];
+      if (idExistente) {
+        toUpdate.push({ id: idExistente, ...p, validado: necesitaRevision ? false : undefined, updated_at: new Date().toISOString() });
         updated++;
       } else {
         toInsert.push({ id: `PROV-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, ...p, validado: false, manual: false, updated_at: new Date().toISOString() });
@@ -378,13 +391,23 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
         await sb('POST', 'proveedores', { body: toInsert.slice(i, i+100), prefer: 'resolution=ignore-duplicates,return=minimal' });
       }
     }
+
+    let actualizadosOk = 0;
+    const erroresActualizacion = [];
     for (const u of toUpdate) {
       const { id, ...changes } = u;
-      await sb('PATCH', `proveedores?id=eq.${id}`, { body: changes, prefer: 'return=minimal' }).catch(() => {});
+      try {
+        await sb('PATCH', `proveedores?id=eq.${id}`, { body: changes, prefer: 'return=minimal' });
+        actualizadosOk++;
+      } catch (e) {
+        erroresActualizacion.push({ id, nombre: changes.nombre, error: e.message });
+      }
     }
 
     ok(res, {
-      added, updated, total: productos.length,
+      added, updated, actualizados_ok: actualizadosOk,
+      errores_actualizacion: erroresActualizacion,
+      total: productos.length,
       confianza, necesita_revision: necesitaRevision,
       mapping_usado: mapping,
     });
