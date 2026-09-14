@@ -155,6 +155,19 @@ app.get('/proveedores/list', async (_, res) => {
     ok(res, { proveedores: provs });
   } catch (e) { err(res, e.message); }
 });
+
+// Elimina TODOS los productos de un proveedor (una lista completa)
+app.delete('/proveedores/lista/:proveedor', async (req, res) => {
+  try {
+    const proveedorNombre = decodeURIComponent(req.params.proveedor);
+    if (!proveedorNombre) return err(res, 'Falta el nombre del proveedor', 400);
+    const existentes = await sb('GET', 'proveedores', { filter: `proveedor=eq.${encodeURIComponent(proveedorNombre)}`, select: 'id' });
+    const cantidad = (existentes || []).length;
+    if (!cantidad) return ok(res, { eliminados: 0, mensaje: 'No se encontraron productos de ese proveedor' });
+    await sb('DELETE', `proveedores?proveedor=eq.${encodeURIComponent(proveedorNombre)}`);
+    ok(res, { eliminados: cantidad, proveedor: proveedorNombre });
+  } catch (e) { err(res, e.message); }
+});
 app.patch('/proveedores/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -394,14 +407,19 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
 
     let actualizadosOk = 0;
     const erroresActualizacion = [];
-    for (const u of toUpdate) {
-      const { id, ...changes } = u;
-      try {
-        await sb('PATCH', `proveedores?id=eq.${id}`, { body: changes, prefer: 'return=minimal' });
-        actualizadosOk++;
-      } catch (e) {
-        erroresActualizacion.push({ id, nombre: changes.nombre, error: e.message });
-      }
+    const LOTE_ACTUALIZACION = 20; // cuántas actualizaciones se mandan en paralelo por tanda
+    for (let i = 0; i < toUpdate.length; i += LOTE_ACTUALIZACION) {
+      const lote = toUpdate.slice(i, i + LOTE_ACTUALIZACION);
+      const resultados = await Promise.allSettled(lote.map(u => {
+        const { id, ...changes } = u;
+        return sb('PATCH', `proveedores?id=eq.${id}`, { body: changes, prefer: 'return=minimal' })
+          .then(() => ({ id, nombre: changes.nombre }));
+      }));
+      resultados.forEach((r, idx) => {
+        const { id, nombre } = lote[idx];
+        if (r.status === 'fulfilled') actualizadosOk++;
+        else erroresActualizacion.push({ id, nombre, error: r.reason?.message || 'error desconocido' });
+      });
     }
 
     ok(res, {
