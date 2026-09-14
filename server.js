@@ -56,7 +56,6 @@ app.post('/ventas/bulk', async (req, res) => {
   const { ventas } = req.body;
   if (!Array.isArray(ventas)) return err(res, 'array esperado', 400);
   try {
-    // Ensure items is properly serialized for Supabase JSONB
     const normalized = ventas.map(v => ({
       ...v,
       items: typeof v.items === 'string' ? v.items : JSON.stringify(v.items)
@@ -238,9 +237,7 @@ app.post('/proveedores/upload-excel', upload.single('file'), async (req, res) =>
     if (!proveedorNombre) return err(res, 'Falta el nombre del proveedor', 400);
     if (!ANTHROPIC_API_KEY) return err(res, 'Falta configurar ANTHROPIC_API_KEY en el servidor', 500);
 
-    // Parse Excel/CSV into raw rows
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-    // Try all sheets, pick the one with most non-empty rows
     let bestRows = [];
     let bestSheet = workbook.SheetNames[0];
     for (const sheetName of workbook.SheetNames) {
@@ -257,15 +254,38 @@ app.post('/proveedores/upload-excel', upload.single('file'), async (req, res) =>
 
     if (!rows.length) return err(res, 'El archivo está vacío', 400);
 
-    // Take a sample (first 30 non-empty rows) to send to Claude for column detection
-    const nonEmptyRows = rows; // already filtered above
-    const sampleRows = nonEmptyRows.slice(0, 30);
-    const sampleText = sampleRows.map((r, i) => `Fila ${i}: ${JSON.stringify(r)}`).join('\n');
+    const nonEmptyRows = rows;
+
+    // Heurística: muchas listas traen filas de datos institucionales (CUIT, Razón Social, dirección, etc.)
+    // antes de que arranque la tabla real. Buscamos la fila que más se parece a un encabezado real
+    // para darle una pista fuerte a la IA, en vez de dejarla adivinar sola entre filas de preámbulo.
+    const HEADER_KEYWORDS = ['codigo','cód','sku','art','artículo','articulo','nombre','producto','descripcion','descripción','detalle','titulo','título','precio','costo','público','publico','pvp','neto','lista','cantidad','stock','isbn'];
+    function puntuarComoHeader(row) {
+      let puntos = 0;
+      for (const cell of row) {
+        if (typeof cell !== 'string') continue;
+        const c = cell.toLowerCase().trim();
+        if (c.length > 0 && c.length < 40 && HEADER_KEYWORDS.some(k => c.includes(k))) puntos++;
+      }
+      return puntos;
+    }
+    let mejorFilaHeader = 0, mejorPuntaje = 0;
+    nonEmptyRows.slice(0, 80).forEach((row, idx) => {
+      const p = puntuarComoHeader(row);
+      if (p > mejorPuntaje) { mejorPuntaje = p; mejorFilaHeader = idx; }
+    });
+
+    const inicioMuestra = mejorPuntaje >= 2 ? Math.max(0, mejorFilaHeader - 2) : 0;
+    const sampleRows = nonEmptyRows.slice(inicioMuestra, inicioMuestra + 30);
+    const sampleText = sampleRows.map((r, i) => `Fila ${inicioMuestra + i}: ${JSON.stringify(r)}`).join('\n');
+    const pistaHeader = mejorPuntaje >= 2
+      ? `\n\nPISTA: la fila ${mejorFilaHeader} parece contener los encabezados reales de la tabla (palabras como código/producto/precio). Es muy probable que fila_inicio sea ${mejorFilaHeader + 1} o muy cercano, salvo que veas evidencia clara de lo contrario.`
+      : '';
 
     const prompt = `Sos un asistente experto en listas de precios de proveedores de jugueterías en Argentina. Analizá estas filas de un archivo Excel e identificá las columnas clave.
 
-Filas del archivo (array de celdas, indexadas desde columna 0):
-${sampleText}
+Filas del archivo (array de celdas, indexadas desde columna 0; el índice de fila es el real dentro del archivo, no empieza necesariamente en 0):
+${sampleText}${pistaHeader}
 
 REGLAS para identificar cada columna:
 - NOMBRE del producto: buscá headers como "Descripción", "Artículo", "Producto", "Detalle", "Nombre", "Art.". Es la columna con TEXTO DESCRIPTIVO del juguete/producto. Suele ser la más larga en contenido.
@@ -301,11 +321,9 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
     const aiText = aiData.content?.[0]?.text || '';
     let mapping;
     try {
-      // Try to extract JSON from response more robustly
       let jsonStr = aiText.trim();
       const jsonMatch = aiText.match(/\{[\s\S]*?\}/);
       if (jsonMatch) jsonStr = jsonMatch[0];
-      // Remove any trailing commas before closing braces (common AI mistake)
       jsonStr = jsonStr.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
       try {
         mapping = JSON.parse(jsonStr);
@@ -319,7 +337,6 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
     const { fila_inicio, col_nombre, col_codigo, col_costo, col_publico, confianza } = mapping;
     const necesitaRevision = confianza !== 'alto';
 
-    // Extract products using detected mapping
     const productos = [];
     for (let i = fila_inicio; i < nonEmptyRows.length; i++) {
       const row = nonEmptyRows[i];
@@ -350,8 +367,6 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
       return err(res, 'No se pudieron extraer productos. Revisá el formato del archivo o probá con otra hoja.');
     }
 
-    // Detect if prices are in thousands (e.g. 11.5 instead of 11500)
-    // Use median to avoid outliers skewing the detection
     const precios = productos.map(p => p.precio_publico || p.precio_costo || 0).filter(p => p > 0 && p < 10000);
     if (precios.length > 0) {
       const sorted = [...precios].sort((a, b) => a - b);
@@ -359,7 +374,6 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
       if (median < 500) {
         console.log(`Precios en miles detectados (mediana: ${median}), multiplicando x1000`);
         productos.forEach(p => {
-          // Only multiply prices that are clearly in the "thousands" range (< 2000)
           if (p.precio_costo && p.precio_costo < 2000) p.precio_costo = Math.round(p.precio_costo * 1000);
           if (p.precio_publico && p.precio_publico < 2000) p.precio_publico = Math.round(p.precio_publico * 1000);
           if (p.precio_venta && p.precio_venta < 2000) p.precio_venta = Math.round(p.precio_venta * 1000);
@@ -367,12 +381,11 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
       }
     }
 
-    // Upsert into Supabase: match por código (si existe) o por nombre normalizado, update si existe, insert si es nuevo
     const normalizar = (s) => (s || '')
       .toString()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // saca tildes
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
-      .replace(/\s+/g, ' ') // colapsa espacios múltiples
+      .replace(/\s+/g, ' ')
       .trim();
 
     const existing = await sb('GET', 'proveedores', { filter: `proveedor=eq.${encodeURIComponent(proveedorNombre)}`, select: 'id,nombre,codigo', limit: 5000 });
@@ -407,7 +420,7 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
 
     let actualizadosOk = 0;
     const erroresActualizacion = [];
-    const LOTE_ACTUALIZACION = 20; // cuántas actualizaciones se mandan en paralelo por tanda
+    const LOTE_ACTUALIZACION = 20;
     for (let i = 0; i < toUpdate.length; i += LOTE_ACTUALIZACION) {
       const lote = toUpdate.slice(i, i + LOTE_ACTUALIZACION);
       const resultados = await Promise.allSettled(lote.map(u => {
