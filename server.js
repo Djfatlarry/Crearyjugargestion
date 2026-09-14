@@ -7,7 +7,7 @@ const XLSX = require('xlsx');
 const registrarReconciliacionTiendanube = require('./tiendanube-reconciliacion');
 const registrarAuthTiendanube = require('./auth-tiendanube');
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 } }); // 40MB, algunas listas traen imágenes incrustadas
 
 const app = express();
 app.use(cors());
@@ -230,7 +230,17 @@ app.patch('/productos-pendientes/:id', async (req, res) => {
 // ─── CARGA INTELIGENTE DE LISTA DE PROVEEDOR (con IA) ────────────────────────
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-app.post('/proveedores/upload-excel', upload.single('file'), async (req, res) => {
+app.post('/proveedores/upload-excel', (req, res, next) => {
+  upload.single('file')(req, res, (uploadErr) => {
+    if (uploadErr) {
+      if (uploadErr.code === 'LIMIT_FILE_SIZE') {
+        return err(res, 'El archivo es demasiado grande (máximo 40MB). Si tiene fotos incrustadas, probá guardarlo como "Excel sin macros" o sacar imágenes innecesarias.', 400);
+      }
+      return err(res, 'Error recibiendo el archivo: ' + uploadErr.message, 400);
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     if (!req.file) return err(res, 'No se recibió ningún archivo', 400);
     const proveedorNombre = req.body.proveedor;
@@ -256,9 +266,6 @@ app.post('/proveedores/upload-excel', upload.single('file'), async (req, res) =>
 
     const nonEmptyRows = rows;
 
-    // Heurística: muchas listas traen filas de datos institucionales (CUIT, Razón Social, dirección, etc.)
-    // antes de que arranque la tabla real. Buscamos la fila que más se parece a un encabezado real
-    // para darle una pista fuerte a la IA, en vez de dejarla adivinar sola entre filas de preámbulo.
     const HEADER_KEYWORDS = ['codigo','cód','sku','art','artículo','articulo','nombre','producto','descripcion','descripción','detalle','titulo','título','precio','costo','público','publico','pvp','neto','lista','cantidad','stock','isbn'];
     function puntuarComoHeader(row) {
       let puntos = 0;
