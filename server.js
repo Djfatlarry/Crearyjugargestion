@@ -251,7 +251,7 @@ app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
   try {
     if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
     const { id } = req.params;
-    const { categoria_id, stock } = req.body;
+    const { categoria_id, stock, descripcion } = req.body;
     if (!categoria_id) return err(res, 'Falta elegir la categoría', 400);
     if (stock === undefined || stock === null || stock === '') return err(res, 'Falta el stock inicial', 400);
 
@@ -270,6 +270,9 @@ app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
         stock_management: true,
       }],
     };
+    if (descripcion && descripcion.trim()) {
+      payload.description = { es: descripcion };
+    }
 
     const creado = await tn('POST', '/products', payload);
 
