@@ -171,7 +171,7 @@ app.patch('/proveedores/:id', async (req, res) => {
   const { id } = req.params;
   try {
     if (req.body.precio_venta !== undefined) {
-      const ex = await sb('GET', `proveedores?id=eq.${id}`, { select: 'nombre,precio_venta' });
+      const ex = await sb('GET', 'proveedores', { filter: `id=eq.${id}`, select: 'nombre,precio_venta' });
       const prev = ex?.[0];
       if (prev && req.body.precio_venta !== prev.precio_venta) {
         await sb('POST', 'precio_log', { body: { producto_id: id, nombre: prev.nombre, precio_anterior: prev.precio_venta, precio_nuevo: req.body.precio_venta } });
@@ -238,7 +238,7 @@ app.post('/proveedores/:id/foto', upload.array('fotos', 10), async (req, res) =>
       urlsSubidas.push(`${SUPABASE_URL}/storage/v1/object/public/fotos-productos/${filePath}`);
     }
 
-    const existing = await sb('GET', `proveedores?id=eq.${id}`, { select: 'imagenes' });
+    const existing = await sb('GET', 'proveedores', { filter: `id=eq.${id}`, select: 'imagenes' });
     const prevImgs = (existing?.[0]?.imagenes) || [];
     const nuevasImagenes = [...prevImgs, ...urlsSubidas];
 
