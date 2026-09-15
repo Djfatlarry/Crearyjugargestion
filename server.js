@@ -211,6 +211,83 @@ app.get('/proveedores/precio-log', async (_, res) => {
   catch (e) { err(res, e.message); }
 });
 
+// ─── PUBLICAR PRODUCTOS EN TIENDANUBE DESDE LA APP ───────────────────────────
+const TIENDANUBE_ACCESS_TOKEN = process.env.TIENDANUBE_ACCESS_TOKEN;
+const TIENDANUBE_STORE_ID = process.env.TIENDANUBE_STORE_ID;
+
+async function tn(method, path, body) {
+  const res = await fetch(`https://api.tiendanube.com/v1/${TIENDANUBE_STORE_ID}${path}`, {
+    method,
+    headers: {
+      'Authentication': `bearer ${TIENDANUBE_ACCESS_TOKEN}`,
+      'User-Agent': 'CrearYJugarGestion (contacto@crearyjugar.com.ar)',
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  let data;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!res.ok) throw new Error(`Tiendanube ${method} ${path}: ${res.status} ${typeof data === 'string' ? data : JSON.stringify(data)}`);
+  return data;
+}
+
+// Trae las categorías reales de la tienda, para el desplegable
+app.get('/tiendanube/categorias', async (_, res) => {
+  try {
+    if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
+    const cats = await tn('GET', '/categories?per_page=200');
+    const simplificadas = (cats || []).map(c => ({
+      id: c.id,
+      nombre: c.name?.es || c.name || `Categoría ${c.id}`,
+      padre: c.parent || null,
+    }));
+    ok(res, { categorias: simplificadas });
+  } catch (e) { err(res, e.message); }
+});
+
+// Publica un producto del catálogo como producto nuevo en Tiendanube
+app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
+  try {
+    if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
+    const { id } = req.params;
+    const { categoria_id, stock } = req.body;
+    if (!categoria_id) return err(res, 'Falta elegir la categoría', 400);
+    if (stock === undefined || stock === null || stock === '') return err(res, 'Falta el stock inicial', 400);
+
+    const prodRes = await sb('GET', 'proveedores', { filter: `id=eq.${id}`, select: 'id,nombre,precio_venta,imagenes,tiendanube_product_id' });
+    const prod = prodRes?.[0];
+    if (!prod) return err(res, 'Producto no encontrado', 404);
+    if (prod.tiendanube_product_id) return err(res, 'Este producto ya está publicado en Tiendanube', 400);
+    if (!prod.precio_venta) return err(res, 'El producto no tiene precio de venta cargado', 400);
+
+    const payload = {
+      name: { es: prod.nombre },
+      categories: [Number(categoria_id)],
+      variants: [{
+        price: String(prod.precio_venta),
+        stock: Number(stock),
+        stock_management: true,
+      }],
+    };
+
+    const creado = await tn('POST', '/products', payload);
+
+    let fotoError = null;
+    if (prod.imagenes && prod.imagenes.length) {
+      try {
+        await tn('POST', `/products/${creado.id}/images`, { src: prod.imagenes[0] });
+      } catch (imgErr) {
+        fotoError = imgErr.message;
+      }
+    }
+
+    await sb('PATCH', `proveedores?id=eq.${id}`, { body: { tiendanube_product_id: creado.id, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+
+    ok(res, { tiendanube_product_id: creado.id, foto_error: fotoError });
+  } catch (e) { err(res, e.message); }
+});
+
 // Subir una o varias fotos de un producto puntual a Supabase Storage
 app.post('/proveedores/:id/foto', upload.array('fotos', 10), async (req, res) => {
   try {
