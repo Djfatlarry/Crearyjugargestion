@@ -211,6 +211,41 @@ app.get('/proveedores/precio-log', async (_, res) => {
   catch (e) { err(res, e.message); }
 });
 
+// Subir foto de un producto puntual a Supabase Storage
+app.post('/proveedores/:id/foto', upload.single('foto'), async (req, res) => {
+  try {
+    if (!req.file) return err(res, 'No se recibió ninguna foto', 400);
+    const { id } = req.params;
+
+    const extMatch = (req.file.originalname || '').match(/\.([a-zA-Z0-9]+)$/);
+    const ext = (extMatch ? extMatch[1] : 'jpg').toLowerCase();
+    const filePath = `${id}-${Date.now()}.${ext}`;
+
+    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/fotos-productos/${filePath}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': req.file.mimetype || 'application/octet-stream',
+      },
+      body: req.file.buffer,
+    });
+    if (!uploadRes.ok) {
+      const t = await uploadRes.text();
+      return err(res, `Error subiendo la foto: ${uploadRes.status} ${t}`);
+    }
+
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/fotos-productos/${filePath}`;
+
+    const existing = await sb('GET', `proveedores?id=eq.${id}`, { select: 'imagenes' });
+    const prevImgs = (existing?.[0]?.imagenes) || [];
+    const nuevasImagenes = [publicUrl, ...prevImgs];
+
+    await sb('PATCH', `proveedores?id=eq.${id}`, { body: { imagenes: nuevasImagenes, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+
+    ok(res, { url: publicUrl, imagenes: nuevasImagenes });
+  } catch (e) { err(res, e.message); }
+});
+
 // PRODUCTOS PENDIENTES (manuales)
 app.get('/productos-pendientes', async (_, res) => {
   try { const d = await sb('GET', 'productos_pendientes', { order: 'created_at.desc' }); ok(res, { productos: d || [] }); }
