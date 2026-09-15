@@ -211,38 +211,40 @@ app.get('/proveedores/precio-log', async (_, res) => {
   catch (e) { err(res, e.message); }
 });
 
-// Subir foto de un producto puntual a Supabase Storage
-app.post('/proveedores/:id/foto', upload.single('foto'), async (req, res) => {
+// Subir una o varias fotos de un producto puntual a Supabase Storage
+app.post('/proveedores/:id/foto', upload.array('fotos', 10), async (req, res) => {
   try {
-    if (!req.file) return err(res, 'No se recibió ninguna foto', 400);
+    if (!req.files || !req.files.length) return err(res, 'No se recibió ninguna foto', 400);
     const { id } = req.params;
 
-    const extMatch = (req.file.originalname || '').match(/\.([a-zA-Z0-9]+)$/);
-    const ext = (extMatch ? extMatch[1] : 'jpg').toLowerCase();
-    const filePath = `${id}-${Date.now()}.${ext}`;
+    const urlsSubidas = [];
+    for (const file of req.files) {
+      const extMatch = (file.originalname || '').match(/\.([a-zA-Z0-9]+)$/);
+      const ext = (extMatch ? extMatch[1] : 'jpg').toLowerCase();
+      const filePath = `${id}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
 
-    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/fotos-productos/${filePath}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': req.file.mimetype || 'application/octet-stream',
-      },
-      body: req.file.buffer,
-    });
-    if (!uploadRes.ok) {
-      const t = await uploadRes.text();
-      return err(res, `Error subiendo la foto: ${uploadRes.status} ${t}`);
+      const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/fotos-productos/${filePath}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': file.mimetype || 'application/octet-stream',
+        },
+        body: file.buffer,
+      });
+      if (!uploadRes.ok) {
+        const t = await uploadRes.text();
+        return err(res, `Error subiendo una foto: ${uploadRes.status} ${t}`);
+      }
+      urlsSubidas.push(`${SUPABASE_URL}/storage/v1/object/public/fotos-productos/${filePath}`);
     }
-
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/fotos-productos/${filePath}`;
 
     const existing = await sb('GET', `proveedores?id=eq.${id}`, { select: 'imagenes' });
     const prevImgs = (existing?.[0]?.imagenes) || [];
-    const nuevasImagenes = [publicUrl, ...prevImgs];
+    const nuevasImagenes = [...prevImgs, ...urlsSubidas];
 
     await sb('PATCH', `proveedores?id=eq.${id}`, { body: { imagenes: nuevasImagenes, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
 
-    ok(res, { url: publicUrl, imagenes: nuevasImagenes });
+    ok(res, { urls: urlsSubidas, imagenes: nuevasImagenes });
   } catch (e) { err(res, e.message); }
 });
 
