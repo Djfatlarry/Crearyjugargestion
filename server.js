@@ -461,11 +461,15 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
     const { fila_inicio, col_nombre, col_codigo, col_costo, col_publico, confianza } = mapping;
     const necesitaRevision = confianza !== 'alto';
 
+    // Limpia texto de celdas: saca saltos de línea/espacios de más que quedan cuando
+    // el proveedor usa celdas con texto en varias líneas (muy común en listas con fotos/logos).
+    const limpiarTexto = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+
     const productos = [];
+    let ultimoNombreVisto = '';
     for (let i = fila_inicio; i < nonEmptyRows.length; i++) {
       const row = nonEmptyRows[i];
-      const nombre = col_nombre !== null && row[col_nombre] ? String(row[col_nombre]).trim() : '';
-      if (!nombre || nombre.length < 2) continue;
+      let nombre = col_nombre !== null && row[col_nombre] ? limpiarTexto(row[col_nombre]) : '';
       const parseNum = (v) => {
         if (v === null || v === undefined || v === '') return null;
         if (typeof v === 'number') return v;
@@ -475,10 +479,21 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
       };
       const costo = col_costo !== null ? parseNum(row[col_costo]) : null;
       const publico = col_publico !== null ? parseNum(row[col_publico]) : null;
-      if (!costo && !publico) continue;
+      if (!costo && !publico) continue; // fila sin precio: no es un producto real, la saltamos
+
+      // Si el nombre viene vacío pero SÍ hay precio, es muy probable que sea una celda combinada
+      // (el proveedor agrupó 2 presentaciones bajo un mismo nombre visual). Usamos el último
+      // nombre visto en vez de descartar la fila entera.
+      if (!nombre || nombre.length < 2) {
+        if (!ultimoNombreVisto) continue;
+        nombre = ultimoNombreVisto;
+      } else {
+        ultimoNombreVisto = nombre;
+      }
+
       productos.push({
         proveedor: proveedorNombre,
-        codigo: col_codigo !== null ? String(row[col_codigo] || '').trim() : '',
+        codigo: col_codigo !== null ? limpiarTexto(row[col_codigo]) : '',
         nombre,
         precio_costo: costo,
         precio_publico: publico || (costo ? Math.round(costo * 2.2) : null),
