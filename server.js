@@ -541,7 +541,8 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
     productos.forEach(p => {
       const codigoKey = p.codigo && p.codigo.trim() ? p.codigo.trim().toLowerCase() : null;
       const nombreKey = normalizar(p.nombre);
-      const idExistente = (codigoKey && existingPorCodigo[codigoKey]) || existingPorNombre[nombreKey];
+      // Si el producto tiene código, SOLO se busca por código (nunca cae a buscar por nombre).
+      const idExistente = codigoKey ? existingPorCodigo[codigoKey] : existingPorNombre[nombreKey];
       if (idExistente) {
         toUpdate.push({ id: idExistente, ...p, validado: necesitaRevision ? false : undefined, updated_at: new Date().toISOString() });
         updated++;
