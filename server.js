@@ -465,11 +465,23 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
     // el proveedor usa celdas con texto en varias líneas (muy común en listas con fotos/logos).
     const limpiarTexto = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 
+    // Si la celda de nombre trae un salto de línea (título en la primera línea, descripción
+    // después), separamos en nombre + descripción ANTES de colapsar los espacios, para no
+    // perder ese límite. Si no hay salto de línea, queda todo como nombre (sin descripción).
+    const separarNombreDescripcion = (raw) => {
+      const s = String(raw || '');
+      const partes = s.split(/[\r\n]+/).map(p => p.trim()).filter(p => p.length > 0);
+      if (partes.length <= 1) return { nombre: limpiarTexto(s), descripcion: '' };
+      return { nombre: partes[0], descripcion: limpiarTexto(partes.slice(1).join(' ')) };
+    };
+
     const productos = [];
     let ultimoNombreVisto = '';
+    let ultimaDescripcionVista = '';
     for (let i = fila_inicio; i < nonEmptyRows.length; i++) {
       const row = nonEmptyRows[i];
-      let nombre = col_nombre !== null && row[col_nombre] ? limpiarTexto(row[col_nombre]) : '';
+      const celdaNombre = col_nombre !== null ? row[col_nombre] : '';
+      let { nombre, descripcion } = celdaNombre ? separarNombreDescripcion(celdaNombre) : { nombre: '', descripcion: '' };
       const parseNum = (v) => {
         if (v === null || v === undefined || v === '') return null;
         if (typeof v === 'number') return v;
@@ -484,14 +496,17 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
       if (!nombre || nombre.length < 2) {
         if (!ultimoNombreVisto) continue;
         nombre = ultimoNombreVisto;
+        descripcion = ultimaDescripcionVista;
       } else {
         ultimoNombreVisto = nombre;
+        ultimaDescripcionVista = descripcion;
       }
 
       productos.push({
         proveedor: proveedorNombre,
         codigo: col_codigo !== null ? limpiarTexto(row[col_codigo]) : '',
         nombre,
+        descripcion,
         precio_costo: costo,
         precio_publico: publico || (costo ? Math.round(costo * 2.2) : null),
         precio_venta: publico || (costo ? Math.round(costo * 2.2) : null),
@@ -540,7 +555,9 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
       const nombreKey = normalizar(p.nombre);
       const idExistente = codigoKey ? existingPorCodigo[codigoKey] : existingPorNombre[nombreKey];
       if (idExistente) {
-        toUpdate.push({ id: idExistente, ...p, validado: necesitaRevision ? false : undefined, updated_at: new Date().toISOString() });
+        const { descripcion: descNueva, ...pSinDescripcion } = p;
+        const cambios = descNueva ? p : pSinDescripcion; // no pisar una descripción ya guardada con una vacía
+        toUpdate.push({ id: idExistente, ...cambios, validado: necesitaRevision ? false : undefined, updated_at: new Date().toISOString() });
         updated++;
       } else {
         toInsert.push({ id: `PROV-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, ...p, validado: false, manual: false, updated_at: new Date().toISOString() });
@@ -558,7 +575,6 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
     const erroresActualizacion = [];
     const LOTE_ACTUALIZACION = 20;
 
-    // Ejecuta un lote de actualizaciones y devuelve las que fallaron (para reintentar)
     async function ejecutarLote(lote) {
       const resultados = await Promise.allSettled(lote.map(u => {
         const { id, ...changes } = u;
@@ -579,7 +595,6 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
       const fallidas = await ejecutarLote(lote);
       pendientesReintento.push(...fallidas);
     }
-    // Reintento único para las que fallaron en el primer intento (evita fallas pasajeras)
     if (pendientesReintento.length) {
       await new Promise(r => setTimeout(r, 800));
       const siguenFallando = await ejecutarLote(pendientesReintento);
