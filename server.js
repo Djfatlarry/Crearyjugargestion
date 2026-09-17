@@ -479,11 +479,8 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
       };
       const costo = col_costo !== null ? parseNum(row[col_costo]) : null;
       const publico = col_publico !== null ? parseNum(row[col_publico]) : null;
-      if (!costo && !publico) continue; // fila sin precio: no es un producto real, la saltamos
+      if (!costo && !publico) continue;
 
-      // Si el nombre viene vacío pero SÍ hay precio, es muy probable que sea una celda combinada
-      // (el proveedor agrupó 2 presentaciones bajo un mismo nombre visual). Usamos el último
-      // nombre visto en vez de descartar la fila entera.
       if (!nombre || nombre.length < 2) {
         if (!ultimoNombreVisto) continue;
         nombre = ultimoNombreVisto;
@@ -541,7 +538,6 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
     productos.forEach(p => {
       const codigoKey = p.codigo && p.codigo.trim() ? p.codigo.trim().toLowerCase() : null;
       const nombreKey = normalizar(p.nombre);
-      // Si el producto tiene código, SOLO se busca por código (nunca cae a buscar por nombre).
       const idExistente = codigoKey ? existingPorCodigo[codigoKey] : existingPorNombre[nombreKey];
       if (idExistente) {
         toUpdate.push({ id: idExistente, ...p, validado: necesitaRevision ? false : undefined, updated_at: new Date().toISOString() });
@@ -561,18 +557,33 @@ Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
     let actualizadosOk = 0;
     const erroresActualizacion = [];
     const LOTE_ACTUALIZACION = 20;
-    for (let i = 0; i < toUpdate.length; i += LOTE_ACTUALIZACION) {
-      const lote = toUpdate.slice(i, i + LOTE_ACTUALIZACION);
+
+    // Ejecuta un lote de actualizaciones y devuelve las que fallaron (para reintentar)
+    async function ejecutarLote(lote) {
       const resultados = await Promise.allSettled(lote.map(u => {
         const { id, ...changes } = u;
         return sb('PATCH', `proveedores?id=eq.${id}`, { body: changes, prefer: 'return=minimal' })
           .then(() => ({ id, nombre: changes.nombre }));
       }));
+      const fallidas = [];
       resultados.forEach((r, idx) => {
-        const { id, nombre } = lote[idx];
         if (r.status === 'fulfilled') actualizadosOk++;
-        else erroresActualizacion.push({ id, nombre, error: r.reason?.message || 'error desconocido' });
+        else fallidas.push(lote[idx]);
       });
+      return fallidas;
+    }
+
+    let pendientesReintento = [];
+    for (let i = 0; i < toUpdate.length; i += LOTE_ACTUALIZACION) {
+      const lote = toUpdate.slice(i, i + LOTE_ACTUALIZACION);
+      const fallidas = await ejecutarLote(lote);
+      pendientesReintento.push(...fallidas);
+    }
+    // Reintento único para las que fallaron en el primer intento (evita fallas pasajeras)
+    if (pendientesReintento.length) {
+      await new Promise(r => setTimeout(r, 800));
+      const siguenFallando = await ejecutarLote(pendientesReintento);
+      siguenFallando.forEach(u => erroresActualizacion.push({ id: u.id, nombre: u.nombre, error: 'Falló incluso después de reintentar' }));
     }
 
     ok(res, {
