@@ -301,6 +301,30 @@ app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
   } catch (e) { err(res, e.message); }
 });
 
+// Da de baja un producto publicado: lo borra de Tiendanube y limpia el vínculo en la app
+app.delete('/proveedores/:id/publicar-tiendanube', async (req, res) => {
+  try {
+    if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
+    const { id } = req.params;
+
+    const prodRes = await sb('GET', 'proveedores', { filter: `id=eq.${id}`, select: 'id,tiendanube_product_id' });
+    const prod = prodRes?.[0];
+    if (!prod) return err(res, 'Producto no encontrado', 404);
+    if (!prod.tiendanube_product_id) return err(res, 'Este producto no está publicado en Tiendanube', 400);
+
+    try {
+      await tn('DELETE', `/products/${prod.tiendanube_product_id}`);
+    } catch (tnErr) {
+      // Si ya no existe en Tiendanube (por ej. lo borraron a mano antes), igual limpiamos el vínculo local
+      if (!/404/.test(tnErr.message)) throw tnErr;
+    }
+
+    await sb('PATCH', `proveedores?id=eq.${id}`, { body: { tiendanube_product_id: null, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+
+    ok(res, {});
+  } catch (e) { err(res, e.message); }
+});
+
 // Subir una o varias fotos de un producto puntual a Supabase Storage
 app.post('/proveedores/:id/foto', upload.array('fotos', 10), async (req, res) => {
   try {
