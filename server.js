@@ -251,27 +251,37 @@ app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
   try {
     if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
     const { id } = req.params;
-    const { categoria_id, stock, descripcion } = req.body;
+    const { categoria_id, stock, descripcion, peso, ancho, alto, profundidad, tags } = req.body;
     if (!categoria_id) return err(res, 'Falta elegir la categoría', 400);
     if (stock === undefined || stock === null || stock === '') return err(res, 'Falta el stock inicial', 400);
+    if (!descripcion || !descripcion.trim()) return err(res, 'Falta la descripción', 400);
 
     const prodRes = await sb('GET', 'proveedores', { filter: `id=eq.${id}`, select: 'id,nombre,precio_venta,imagenes,tiendanube_product_id' });
     const prod = prodRes?.[0];
     if (!prod) return err(res, 'Producto no encontrado', 404);
     if (prod.tiendanube_product_id) return err(res, 'Este producto ya está publicado en Tiendanube', 400);
     if (!prod.precio_venta) return err(res, 'El producto no tiene precio de venta cargado', 400);
+    if (!prod.imagenes || !prod.imagenes.length) return err(res, 'Falta cargar al menos una foto', 400);
+
+    const variant = {
+      price: String(prod.precio_venta),
+      stock: Number(stock),
+      stock_management: true,
+    };
+    // Peso y medidas son opcionales, pero ayudan a que el cálculo de envío sea correcto
+    if (peso !== undefined && peso !== null && peso !== '') variant.weight = String(peso);
+    if (ancho !== undefined && ancho !== null && ancho !== '') variant.width = String(ancho);
+    if (alto !== undefined && alto !== null && alto !== '') variant.height = String(alto);
+    if (profundidad !== undefined && profundidad !== null && profundidad !== '') variant.depth = String(profundidad);
 
     const payload = {
       name: { es: prod.nombre },
       categories: [Number(categoria_id)],
-      variants: [{
-        price: String(prod.precio_venta),
-        stock: Number(stock),
-        stock_management: true,
-      }],
+      description: { es: descripcion },
+      variants: [variant],
     };
-    if (descripcion && descripcion.trim()) {
-      payload.description = { es: descripcion };
+    if (tags && tags.trim()) {
+      payload.tags = tags.trim();
     }
 
     const creado = await tn('POST', '/products', payload);
