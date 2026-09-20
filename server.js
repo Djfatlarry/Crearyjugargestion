@@ -286,18 +286,23 @@ app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
 
     const creado = await tn('POST', '/products', payload);
 
-    let fotoError = null;
+    // Sube TODAS las fotos cargadas, no solo la primera
+    let fotosError = null;
+    let fotosSubidas = 0;
     if (prod.imagenes && prod.imagenes.length) {
-      try {
-        await tn('POST', `/products/${creado.id}/images`, { src: prod.imagenes[0] });
-      } catch (imgErr) {
-        fotoError = imgErr.message;
+      for (const url of prod.imagenes) {
+        try {
+          await tn('POST', `/products/${creado.id}/images`, { src: url });
+          fotosSubidas++;
+        } catch (imgErr) {
+          if (!fotosError) fotosError = imgErr.message; // guardamos el primer error, seguimos con las demás
+        }
       }
     }
 
     await sb('PATCH', `proveedores?id=eq.${id}`, { body: { tiendanube_product_id: creado.id, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
 
-    ok(res, { tiendanube_product_id: creado.id, foto_error: fotoError });
+    ok(res, { tiendanube_product_id: creado.id, fotos_subidas: fotosSubidas, fotos_total: (prod.imagenes||[]).length, foto_error: fotosError });
   } catch (e) { err(res, e.message); }
 });
 
@@ -322,6 +327,37 @@ app.delete('/proveedores/:id/publicar-tiendanube', async (req, res) => {
     await sb('PATCH', `proveedores?id=eq.${id}`, { body: { tiendanube_product_id: null, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
 
     ok(res, {});
+  } catch (e) { err(res, e.message); }
+});
+
+// Empuja TODAS las fotos actuales de la app hacia Tiendanube,
+// reemplazando las que tenga publicadas ahí. Solo sirve para productos ya publicados.
+app.post('/proveedores/:id/sync-foto-tiendanube', async (req, res) => {
+  try {
+    if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
+    const { id } = req.params;
+
+    const prodRes = await sb('GET', 'proveedores', { filter: `id=eq.${id}`, select: 'id,imagenes,tiendanube_product_id' });
+    const prod = prodRes?.[0];
+    if (!prod) return err(res, 'Producto no encontrado', 404);
+    if (!prod.tiendanube_product_id) return err(res, 'Este producto no está publicado en Tiendanube', 400);
+    if (!prod.imagenes || !prod.imagenes.length) return err(res, 'El producto no tiene fotos cargadas', 400);
+
+    // Borra las fotos actuales en Tiendanube
+    const actuales = await tn('GET', `/products/${prod.tiendanube_product_id}/images`);
+    for (const img of (actuales || [])) {
+      try { await tn('DELETE', `/products/${prod.tiendanube_product_id}/images/${img.id}`); }
+      catch (delErr) { /* si ya no existe, seguimos igual */ }
+    }
+
+    // Sube TODAS las fotos actuales de la app
+    let fotosSubidas = 0;
+    for (const url of prod.imagenes) {
+      try { await tn('POST', `/products/${prod.tiendanube_product_id}/images`, { src: url }); fotosSubidas++; }
+      catch (imgErr) { /* seguimos con las demás aunque una falle */ }
+    }
+
+    ok(res, { fotos_subidas: fotosSubidas, fotos_total: prod.imagenes.length });
   } catch (e) { err(res, e.message); }
 });
 
