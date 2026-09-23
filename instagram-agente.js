@@ -268,7 +268,7 @@ function completarPlantilla(htmlSlides, valores) {
   return htmlSlides.map((html) => html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (_, k) => escHtml(valores[k] ?? '')));
 }
 
-async function generarProductoUnico(sb, llamarClaude, { productoId, tema = TEMA, plantillaId } = {}) {
+async function generarProductoUnico(sb, llamarClaude, { productoId, tema = TEMA, plantillaId, programadoPara } = {}) {
   let producto;
   if (productoId) {
     producto = await buscarProducto(sb, productoId);
@@ -301,7 +301,10 @@ async function generarProductoUnico(sb, llamarClaude, { productoId, tema = TEMA,
   const slides = await renderizarYSubir(contenido.html_slides);
 
   const [borrador] = await sb('POST', 'publicaciones_borrador', {
-    body: { tipo: 'unico', tema: plantilla ? `plantilla: ${plantilla.nombre}` : tema, producto_ids: [producto.id], contenido, caption, slides },
+    body: {
+      tipo: 'unico', tema: plantilla ? `plantilla: ${plantilla.nombre}` : tema, producto_ids: [producto.id], contenido, caption, slides,
+      programado_para: programadoPara || null,
+    },
     prefer: 'return=representation',
   });
   return borrador;
@@ -563,14 +566,137 @@ async function publicarEnInstagram({ slides, caption }) {
   return (await graph('POST', `${usuario}/media_publish`, { creation_id: creacion })).id;
 }
 
+async function publicarBorrador(sb, b) {
+  try {
+    const mediaId = await publicarEnInstagram({ slides: b.slides, caption: b.caption });
+    const ahora = new Date().toISOString();
+    const [actualizado] = await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(b.id)}`, {
+      body: { estado: 'publicado', ig_media_id: mediaId, publicado_at: ahora, updated_at: ahora, error: null },
+      prefer: 'return=representation',
+    });
+    return actualizado;
+  } catch (e) {
+    await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(b.id)}`, { body: { error: e.message, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+    throw e;
+  }
+}
+
+// --- 7. Agenda (calendarización) ---
+//
+// Días y horarios de publicación + generación automática semanal. Se guarda en la tabla config
+// (clave 'instagram_agenda'). Días con numeración ISO: 1 = lunes ... 7 = domingo. Horario de Argentina.
+
+const AGENDA_DEFAULT = {
+  slots: [{ dia: 2, hora: '21:00' }, { dia: 4, hora: '21:00' }, { dia: 6, hora: '10:00' }],
+  generacion: { dia: 7, hora: '20:00' }, // el domingo a la noche arma los borradores de la semana
+  auto: true,
+};
+const OFFSET_AR = '-03:00'; // Argentina no tiene horario de verano
+
+function partesAR(fecha) {
+  const d = new Date(fecha.getTime() - 3 * 3600e3);
+  return { ymd: d.toISOString().slice(0, 10), dow: d.getUTCDay() || 7, hm: d.toISOString().slice(11, 16) };
+}
+
+function fechaAR(ymd, hora) {
+  return new Date(`${ymd}T${hora}:00${OFFSET_AR}`);
+}
+
+// Próximas fechas de publicación según la agenda, desde `desde` y hasta `dias` días después
+function proximosSlots(agenda, desde = new Date(), dias = 14) {
+  const out = [];
+  for (let i = 0; i <= dias; i++) {
+    const { ymd, dow } = partesAR(new Date(desde.getTime() + i * 86400e3));
+    for (const s of agenda.slots) {
+      if (s.dia !== dow) continue;
+      const f = fechaAR(ymd, s.hora);
+      if (f > desde && f - desde <= dias * 86400e3) out.push(f);
+    }
+  }
+  return out.sort((a, b) => a - b);
+}
+
+async function leerConfig(sb, key) {
+  return (await sb('GET', 'config', { filter: `key=eq.${key}` }))?.[0]?.value;
+}
+
+async function guardarConfig(sb, key, value) {
+  await sb('POST', 'config', { body: { key, value, updated_at: new Date().toISOString() }, prefer: 'resolution=merge-duplicates,return=minimal' });
+}
+
+async function leerAgenda(sb) {
+  return { ...AGENDA_DEFAULT, ...((await leerConfig(sb, 'instagram_agenda')) || {}) };
+}
+
+function validarAgenda(a) {
+  const hora = (h) => typeof h === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(h);
+  const dia = (d) => Number.isInteger(d) && d >= 1 && d <= 7;
+  if (!a || !Array.isArray(a.slots) || a.slots.length > 21) throw new Error('Agenda inválida');
+  const slots = a.slots.map((s) => ({ dia: Number(s.dia), hora: s.hora }));
+  if (!slots.every((s) => dia(s.dia) && hora(s.hora))) throw new Error('Día u hora inválidos en la agenda');
+  const generacion = a.generacion ? { dia: Number(a.generacion.dia), hora: a.generacion.hora } : AGENDA_DEFAULT.generacion;
+  if (!dia(generacion.dia) || !hora(generacion.hora)) throw new Error('Día u hora de generación inválidos');
+  return { slots, generacion, auto: a.auto !== false };
+}
+
+// Arma un borrador para cada fecha de los próximos 7 días que todavía no tenga uno asignado
+async function generarSemana(sb, llamarClaude, ahora = new Date()) {
+  const agenda = await leerAgenda(sb);
+  const slots = proximosSlots(agenda, ahora, 7);
+  const ocupados = await sb('GET', 'publicaciones_borrador', { select: 'programado_para', filter: `programado_para=gte.${ahora.toISOString()}` });
+  const tomados = new Set((ocupados || []).map((o) => new Date(o.programado_para).getTime()));
+  const creados = [];
+  const errores = [];
+  for (const f of slots) {
+    if (tomados.has(f.getTime())) continue;
+    try {
+      const b = await generarProductoUnico(sb, llamarClaude, { programadoPara: f.toISOString() });
+      creados.push({ id: b.id, programado_para: b.programado_para });
+    } catch (e) {
+      errores.push(e.message);
+      console.error(`[instagram] no se pudo generar el borrador para ${f.toISOString()}: ${e.message}`);
+    }
+  }
+  return { creados, errores };
+}
+
 // --- Rutas ---
 
 const TRANSICIONES = { borrador: ['aprobado'], aprobado: ['borrador'], publicado: [] };
 
+// Cada 5 minutos: genera los borradores de la semana en el día/hora de la agenda, y publica los
+// aprobados cuya fecha ya llegó (si Instagram está conectado). Render starter corre una sola
+// instancia siempre encendida, así que alcanza con un intervalo en el proceso.
+async function cicloAgenda(sb, llamarClaude, estado, ahora = new Date()) {
+  if (estado.generando) return;
+  try {
+    const agenda = await leerAgenda(sb);
+    const p = partesAR(ahora);
+    if (agenda.auto && p.dow === agenda.generacion.dia && p.hm >= agenda.generacion.hora) {
+      const ultima = await leerConfig(sb, 'instagram_ultima_generacion');
+      if (ultima?.fecha !== p.ymd) {
+        // Se marca antes de generar: si algo falla no se reintenta en loop (queda el botón manual)
+        await guardarConfig(sb, 'instagram_ultima_generacion', { fecha: p.ymd });
+        estado.generando = true;
+        try { await generarSemana(sb, llamarClaude, ahora); } finally { estado.generando = false; }
+      }
+    }
+    if (igConfigurado()) {
+      const debidos = await sb('GET', 'publicaciones_borrador', { filter: `estado=eq.aprobado&programado_para=lte.${ahora.toISOString()}` });
+      // Los que ya fallaron no se reintentan solos: quedan con el error a la vista para publicarlos a mano
+      for (const b of (debidos || []).filter((x) => !x.error)) {
+        await publicarBorrador(sb, b).catch((e) => console.error(`[instagram] no se pudo publicar ${b.id}: ${e.message}`));
+      }
+    }
+  } catch (e) {
+    console.error(`[instagram] agenda: ${e.message}`);
+  }
+}
+
 module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
   const ok = (res, data) => res.json({ ok: true, ...data });
   const err = (res, msg, status = 500) => res.status(status).json({ ok: false, error: msg });
-  let generando = false; // una generación a la vez: el render usa memoria y el plan es chico
+  const estado = { generando: false }; // una generación a la vez: el render usa memoria y el plan es chico
 
   // Las rutas que gastan (Claude, remove.bg), modifican o publican piden la clave de admin:
   // el backend es público y sin esto cualquiera con la URL podría publicar en la cuenta.
@@ -598,15 +724,19 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
 
   // Genera un borrador. Body: { tipo: 'unico', producto_id?, tema? }
   app.post('/instagram/generar', requiereClave, async (req, res) => {
-    const { tipo = 'unico', producto_id, tema, plantilla_id } = req.body || {};
+    const { tipo = 'unico', producto_id, tema, plantilla_id, programado_para } = req.body || {};
     if (tipo !== 'unico') return err(res, `Tipo de publicación no disponible todavía: ${tipo}`, 400);
-    if (generando) return err(res, 'Ya hay una publicación generándose, probá en un rato', 409);
-    generando = true;
+    if (programado_para && Number.isNaN(Date.parse(programado_para))) return err(res, 'Fecha inválida', 400);
+    if (estado.generando) return err(res, 'Ya hay una publicación generándose, probá en un rato', 409);
+    estado.generando = true;
     try {
-      const borrador = await generarProductoUnico(sb, llamarClaude, { productoId: producto_id, tema, plantillaId: plantilla_id });
+      const borrador = await generarProductoUnico(sb, llamarClaude, {
+        productoId: producto_id, tema, plantillaId: plantilla_id,
+        programadoPara: programado_para ? new Date(programado_para).toISOString() : undefined,
+      });
       ok(res, { borrador });
     } catch (e) { err(res, e.message); }
-    finally { generando = false; }
+    finally { estado.generando = false; }
   });
 
   app.get('/instagram/borradores', async (req, res) => {
@@ -633,6 +763,11 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
       if (b.estado === 'publicado') return err(res, 'Ya está publicado, no se puede modificar', 400);
       const cambios = { updated_at: new Date().toISOString() };
       if (typeof req.body?.caption === 'string') cambios.caption = req.body.caption;
+      if (req.body && 'programado_para' in req.body) {
+        const f = req.body.programado_para;
+        if (f !== null && Number.isNaN(Date.parse(f))) return err(res, 'Fecha inválida', 400);
+        cambios.programado_para = f === null ? null : new Date(f).toISOString();
+      }
       if (req.body?.estado && req.body.estado !== b.estado) {
         if (!TRANSICIONES[b.estado].includes(req.body.estado)) return err(res, `No se puede pasar de ${b.estado} a ${req.body.estado}`, 400);
         cambios.estado = req.body.estado;
@@ -647,15 +782,15 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
     const mensaje = String(req.body?.mensaje || '').trim();
     if (!mensaje) return err(res, 'Escribí qué querés cambiar', 400);
     if (mensaje.length > 1000) return err(res, 'El pedido es muy largo', 400);
-    if (generando) return err(res, 'Hay otra publicación procesándose, probá en un rato', 409);
-    generando = true;
+    if (estado.generando) return err(res, 'Hay otra publicación procesándose, probá en un rato', 409);
+    estado.generando = true;
     try {
       const b = await buscarBorrador(req.params.id);
       if (!b) return err(res, 'Borrador no encontrado', 404);
       if (b.estado === 'publicado') return err(res, 'Ya está publicado, no se puede modificar', 400);
       ok(res, await editarBorrador(sb, llamarClaude, b, mensaje));
     } catch (e) { err(res, e.message); }
-    finally { generando = false; }
+    finally { estado.generando = false; }
   });
 
   app.post('/instagram/borradores/:id/deshacer', requiereClave, async (req, res) => {
@@ -671,14 +806,14 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
   app.post('/instagram/borradores/:id/guardar-plantilla', requiereClave, async (req, res) => {
     const nombre = String(req.body?.nombre || '').trim().slice(0, 60);
     if (!nombre) return err(res, 'Ponele un nombre a la plantilla', 400);
-    if (generando) return err(res, 'Hay otra publicación procesándose, probá en un rato', 409);
-    generando = true;
+    if (estado.generando) return err(res, 'Hay otra publicación procesándose, probá en un rato', 409);
+    estado.generando = true;
     try {
       const b = await buscarBorrador(req.params.id);
       if (!b) return err(res, 'Borrador no encontrado', 404);
       ok(res, { plantilla: await guardarComoPlantilla(sb, llamarClaude, b, nombre) });
     } catch (e) { err(res, e.message); }
-    finally { generando = false; }
+    finally { estado.generando = false; }
   });
 
   app.get('/instagram/plantillas', async (req, res) => {
@@ -712,20 +847,55 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
       const b = await buscarBorrador(req.params.id);
       if (!b) return err(res, 'Borrador no encontrado', 404);
       if (b.estado !== 'aprobado') return err(res, 'Solo se publican borradores aprobados', 400);
-      try {
-        const mediaId = await publicarEnInstagram({ slides: b.slides, caption: b.caption });
-        const ahora = new Date().toISOString();
-        const [actualizado] = await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(b.id)}`, {
-          body: { estado: 'publicado', ig_media_id: mediaId, publicado_at: ahora, updated_at: ahora, error: null },
-          prefer: 'return=representation',
-        });
-        ok(res, { borrador: actualizado });
-      } catch (e) {
-        await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(b.id)}`, { body: { error: e.message, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
-        throw e;
-      }
+      ok(res, { borrador: await publicarBorrador(sb, b) });
     } catch (e) { err(res, e.message); }
   });
+
+  // Publicación a mano (mientras Instagram no está conectado): se sube desde el celular y se marca acá
+  app.post('/instagram/borradores/:id/marcar-publicado', requiereClave, async (req, res) => {
+    try {
+      const b = await buscarBorrador(req.params.id);
+      if (!b) return err(res, 'Borrador no encontrado', 404);
+      if (b.estado !== 'aprobado') return err(res, 'Primero hay que aprobarlo', 400);
+      const ahora = new Date().toISOString();
+      const [actualizado] = await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(b.id)}`, {
+        body: { estado: 'publicado', publicado_at: ahora, updated_at: ahora, error: null },
+        prefer: 'return=representation',
+      });
+      ok(res, { borrador: actualizado });
+    } catch (e) { err(res, e.message); }
+  });
+
+  // --- Agenda ---
+
+  app.get('/instagram/agenda', async (req, res) => {
+    try {
+      const agenda = await leerAgenda(sb);
+      ok(res, { agenda, ig_conectado: igConfigurado(), proximos: proximosSlots(agenda, new Date(), 14).map((f) => f.toISOString()) });
+    } catch (e) { err(res, e.message); }
+  });
+
+  app.put('/instagram/agenda', requiereClave, async (req, res) => {
+    try {
+      const agenda = validarAgenda(req.body);
+      await guardarConfig(sb, 'instagram_agenda', agenda);
+      ok(res, { agenda });
+    } catch (e) { err(res, e.message, 400); }
+  });
+
+  app.post('/instagram/agenda/generar-semana', requiereClave, async (req, res) => {
+    if (estado.generando) return err(res, 'Hay otra publicación procesándose, probá en un rato', 409);
+    estado.generando = true;
+    try { ok(res, await generarSemana(sb, llamarClaude)); }
+    catch (e) { err(res, e.message); }
+    finally { estado.generando = false; }
+  });
+
+  const tick = () => cicloAgenda(sb, llamarClaude, estado);
+  if (process.env.IG_AGENDA !== 'off') {
+    setTimeout(tick, 60e3).unref();
+    setInterval(tick, 5 * 60e3).unref();
+  }
 };
 
 // Exportado para pruebas
@@ -734,3 +904,6 @@ module.exports.promptProductoUnico = promptProductoUnico;
 module.exports.parsearJson = parsearJson;
 module.exports.extraerSlides = extraerSlides;
 module.exports.completarPlantilla = completarPlantilla;
+module.exports.proximosSlots = proximosSlots;
+module.exports.partesAR = partesAR;
+module.exports.cicloAgenda = cicloAgenda;

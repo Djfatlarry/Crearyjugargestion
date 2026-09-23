@@ -110,6 +110,25 @@ details.config .row{margin-top:12px;}
 .chat-ejemplos{font-size:12px;color:var(--ink-soft);margin-top:6px;}
 .card.procesando .slides{opacity:.45;transition:opacity .2s;}
 .spinner.oscuro{border-color:rgba(82,72,108,.25);border-top-color:var(--purple-dark);}
+.fecha-pub{display:flex;align-items:center;gap:8px;margin:0 0 12px;flex-wrap:wrap;font-size:13px;font-weight:700;color:var(--purple-dark);}
+.fecha-pub select{width:auto;padding:7px 10px;font-size:13.5px;}
+.manual{margin-top:14px;background:var(--purple-pale);border:1px solid var(--line);border-radius:var(--radius-md);padding:12px 14px;}
+.manual.hoy{background:#FFF6D6;border-color:#F5D76E;}
+.manual-tit{font-weight:800;color:var(--purple-dark);font-size:14px;}
+.manual .acciones{margin-top:8px;}
+.cal-dia{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:14px 16px;margin-top:10px;box-shadow:var(--shadow-card);}
+.cal-fecha{font-family:'Fraunces',serif;font-size:17px;font-weight:600;color:var(--purple-dark);margin-bottom:6px;}
+.cal-fecha::first-letter{text-transform:uppercase;}
+.cal-item{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line);}
+.cal-item:first-of-type{border-top:none;}
+.cal-hora{font-weight:800;color:var(--purple-dark);width:52px;flex-shrink:0;}
+.cal-item img{width:44px;height:55px;object-fit:cover;border-radius:8px;border:1px solid var(--line);}
+.cal-info{flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;}
+.cal-item .btn{font-size:13px;padding:7px 12px;}
+.editor-agenda{margin-top:12px;display:flex;flex-direction:column;gap:8px;}
+.dia-row{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;flex-wrap:wrap;}
+.dia-row input[type=time],.dia-row select{width:auto;padding:6px 8px;}
+.dia-row input[type=checkbox]{width:auto;}
 .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:14px;font-weight:700;padding:12px 18px;border-radius:var(--radius-md);opacity:0;transition:all .2s;pointer-events:none;max-width:calc(100% - 32px);text-align:center;z-index:10;}
@@ -172,6 +191,7 @@ details.config .row{margin-top:12px;}
   </div>
 
   <div class="tabs" id="tabs">
+    <button class="tab" data-estado="calendario" onclick="cambiarTab(this)">Calendario</button>
     <button class="tab active" data-estado="borrador" onclick="cambiarTab(this)">Borradores<span class="count"></span></button>
     <button class="tab" data-estado="aprobado" onclick="cambiarTab(this)">Aprobados<span class="count"></span></button>
     <button class="tab" data-estado="publicado" onclick="cambiarTab(this)">Publicados<span class="count"></span></button>
@@ -256,15 +276,19 @@ function cambiarTab(el){
 
 function fecha(iso){
   if(!iso) return '';
-  return new Date(iso).toLocaleString('es-AR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+  return new Date(iso).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hourCycle: 'h23', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
 }
 
 function render(){
   document.querySelectorAll('.tab').forEach(t => {
     const n = borradores.filter(b => b.estado === t.dataset.estado).length;
-    t.querySelector('.count').textContent = n ? `(${n})` : '';
+    const c = t.querySelector('.count');
+    if(c) c.textContent = n ? `(${n})` : '';
   });
+  if(estadoActual === 'calendario'){ renderCalendario(); return; }
   const lista = borradores.filter(b => b.estado === estadoActual);
+  // Los aprobados, en el orden en que se van a publicar
+  if(estadoActual === 'aprobado') lista.sort((a, b) => (a.programado_para ? new Date(a.programado_para) : Infinity) - (b.programado_para ? new Date(b.programado_para) : Infinity));
   const cont = document.getElementById('lista');
   if(!lista.length){
     const textos = { borrador: 'No hay borradores. Generá uno nuevo arriba.', aprobado: 'No hay publicaciones aprobadas esperando.', publicado: 'Todavía no se publicó nada desde acá.' };
@@ -291,8 +315,11 @@ function tarjeta(b){
     acciones = `
       <button class="btn btn-soft" onclick="guardarCaption('${b.id}')">Guardar texto</button>
       <button class="btn btn-soft" onclick="cambiarEstado('${b.id}','borrador')">Volver a borrador</button>
-      <button class="btn btn-primary" onclick="publicar('${b.id}', this)">Publicar en Instagram</button>`;
+      ${agendaInfo.ig_conectado ? `<button class="btn btn-primary" onclick="publicar('${b.id}', this)">Publicar ahora</button>` : ''}`;
   }
+  const fechaPub = editable
+    ? `<div class="fecha-pub">📅 Publicar el <select onchange="cambiarFecha('${b.id}', this)">${opcionesFecha(b)}</select></div>`
+    : '';
   const meta = b.estado === 'publicado' ? `Publicado ${fecha(b.publicado_at)}` : `Generado ${fecha(b.created_at)}`;
   return `
     <div class="card" id="b-${b.id}">
@@ -304,11 +331,13 @@ function tarjeta(b){
         </div>
         <div class="head-right"><span class="pill ${esc(b.estado)}">${esc(b.estado)}</span></div>
       </div>
+      ${fechaPub}
       <div class="slides">${slides}</div>
       <div class="section-label">Texto del posteo</div>
       <textarea id="cap-${b.id}" ${editable ? '' : 'readonly'}>${esc(b.caption)}</textarea>
       ${b.error ? `<div class="error-box">Último error al publicar: ${esc(b.error)}</div>` : ''}
       ${acciones ? `<div class="acciones">${acciones}</div>` : ''}
+      ${b.estado === 'aprobado' && !agendaInfo.ig_conectado ? bloqueManual(b) : ''}
       ${editable ? chat(b) : ''}
     </div>`;
 }
@@ -413,6 +442,221 @@ async function borrarPlantilla(id){
   }catch(e){ toast(e.message); }
 }
 
+// --- Agenda y calendario ---
+
+let agendaInfo = { agenda: null, ig_conectado: false, proximos: [] };
+// Siempre en hora de Argentina, aunque el navegador esté en otra zona
+const ZONA = { timeZone: 'America/Argentina/Buenos_Aires', hourCycle: 'h23' };
+const DIAS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+async function cargarAgenda(){
+  try{ agendaInfo = await api('GET', '/instagram/agenda'); }catch(e){ /* lo muestra la conexión */ }
+}
+
+function fechaLarga(iso){
+  return new Date(iso).toLocaleString('es-AR', { ...ZONA, weekday:'long', day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+function claveDia(d){ return new Date(d).toLocaleDateString('es-AR', ZONA); }
+
+// Opciones de fecha: próximos horarios libres de la agenda + la fecha actual del borrador
+function opcionesFecha(b){
+  const ocupadas = new Set(borradores.filter(x => x.id !== b.id && x.programado_para).map(x => new Date(x.programado_para).getTime()));
+  const libres = agendaInfo.proximos.filter(f => !ocupadas.has(new Date(f).getTime()));
+  const actual = b.programado_para ? new Date(b.programado_para).toISOString() : '';
+  const lista = [...new Set([...(actual ? [actual] : []), ...libres])].sort();
+  return `<option value="">Sin fecha</option>` +
+    lista.map(f => `<option value="${f}" ${f === actual ? 'selected' : ''}>${esc(fechaLarga(f))}</option>`).join('') +
+    `<option value="otra">Otra fecha…</option>`;
+}
+
+async function cambiarFecha(id, sel){
+  let valor = sel.value;
+  if(valor === 'otra'){
+    const txt = prompt('¿Cuándo? Escribilo así: 2026-10-03 18:30');
+    if(!txt){ render(); return; }
+    const d = new Date(txt.trim().replace(' ', 'T') + ':00-03:00');
+    if(isNaN(d)){ toast('No entendí la fecha'); render(); return; }
+    valor = d.toISOString();
+  }
+  try{
+    await api('PATCH', `/instagram/borradores/${id}`, { programado_para: valor || null });
+    toast(valor ? 'Fecha guardada' : 'Quedó sin fecha');
+    await cargarBorradores();
+  }catch(e){ toast(e.message); }
+}
+
+// Mientras Instagram no esté conectado: compartir / descargar / copiar y marcar como publicado
+function bloqueManual(b){
+  const vence = b.programado_para && new Date(b.programado_para) <= new Date(Date.now() + 3 * 3600e3);
+  return `
+    <div class="manual ${vence ? 'hoy' : ''}">
+      <div class="manual-tit">${vence ? '¡Es hora de publicarlo!' : 'Para publicarlo desde el celular'}</div>
+      <div class="acciones">
+        <button class="btn btn-primary" onclick="compartir('${b.id}', this)">Compartir en Instagram</button>
+        <button class="btn btn-soft" onclick="descargar('${b.id}', this)">Descargar imágenes</button>
+        <button class="btn btn-soft" onclick="copiarTexto('${b.id}')">Copiar texto</button>
+        <button class="btn btn-good" onclick="marcarPublicado('${b.id}')">Ya lo publiqué</button>
+      </div>
+    </div>`;
+}
+
+async function archivosDe(b){
+  return Promise.all(b.slides.map(async (u, i) => {
+    const r = await fetch(u);
+    if(!r.ok) throw new Error('No se pudo bajar la imagen ' + (i + 1));
+    return new File([await r.blob()], `crear-y-jugar-${i + 1}.jpg`, { type: 'image/jpeg' });
+  }));
+}
+
+async function copiarTexto(id){
+  const b = borradores.find(x => x.id === id);
+  try{ await navigator.clipboard.writeText(document.getElementById('cap-' + id)?.value || b.caption || ''); toast('Texto copiado: pegalo en Instagram'); }
+  catch(e){ toast('No se pudo copiar; seleccioná el texto y copialo a mano'); }
+}
+
+async function compartir(id, btn){
+  const b = borradores.find(x => x.id === id);
+  btn.disabled = true;
+  try{
+    // Instagram no toma el texto al compartir: lo dejamos copiado para pegarlo
+    await copiarTexto(id);
+    const files = await archivosDe(b);
+    if(navigator.canShare && navigator.canShare({ files })){
+      await navigator.share({ files });
+    }else{
+      toast('Este dispositivo no permite compartir directo: descargá las imágenes');
+    }
+  }catch(e){ if(e.name !== 'AbortError') toast(e.message); }
+  btn.disabled = false;
+}
+
+async function descargar(id, btn){
+  const b = borradores.find(x => x.id === id);
+  btn.disabled = true;
+  try{
+    const files = await archivosDe(b);
+    for(const f of files){
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(f); a.download = f.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      await new Promise(r => setTimeout(r, 300));
+    }
+    toast('Imágenes descargadas');
+  }catch(e){ toast(e.message); }
+  btn.disabled = false;
+}
+
+async function marcarPublicado(id){
+  if(!confirm('¿Ya lo subiste a Instagram? Se va a mover a "Publicados".')) return;
+  try{
+    await api('POST', `/instagram/borradores/${id}/marcar-publicado`);
+    toast('¡Listo! Quedó en Publicados');
+    await Promise.all([cargarBorradores(), cargarCandidatos()]);
+  }catch(e){ toast(e.message); }
+}
+
+// Vista de calendario: próximos 14 días con los horarios de la agenda y lo asignado a cada uno
+function renderCalendario(){
+  const cont = document.getElementById('lista');
+  const a = agendaInfo.agenda;
+  if(!a){ cont.innerHTML = '<div class="card vacio"><p class="muted">No se pudo cargar la agenda.</p></div>'; return; }
+  const programados = borradores.filter(b => b.programado_para && b.estado !== 'publicado' || (b.estado === 'publicado' && b.programado_para && new Date(b.programado_para) > Date.now() - 86400e3));
+  const items = [];
+  const usados = new Set();
+  for(const f of agendaInfo.proximos){
+    const b = programados.find(x => new Date(x.programado_para).getTime() === new Date(f).getTime());
+    if(b) usados.add(b.id);
+    items.push({ fecha: f, b });
+  }
+  for(const b of programados) if(!usados.has(b.id)) items.push({ fecha: b.programado_para, b });
+  items.sort((x, y) => new Date(x.fecha) - new Date(y.fecha));
+
+  const porDia = {};
+  for(const it of items){ (porDia[claveDia(it.fecha)] ||= []).push(it); }
+  const resumen = a.slots.map(s => `${DIAS[s.dia].toLowerCase()} ${s.hora}`).join(', ');
+  const dias = Object.values(porDia).map(lista => `
+    <div class="cal-dia">
+      <div class="cal-fecha">${esc(new Date(lista[0].fecha).toLocaleDateString('es-AR', { ...ZONA, weekday:'long', day:'numeric', month:'long' }))}</div>
+      ${lista.map(({ fecha: f, b }) => `
+        <div class="cal-item">
+          <div class="cal-hora">${esc(new Date(f).toLocaleTimeString('es-AR', { ...ZONA, hour:'2-digit', minute:'2-digit' }))}</div>
+          ${b ? `
+            <img src="${esc(b.slides?.[0] || '')}" alt="">
+            <div class="cal-info"><b>${esc(b.contenido?.nombre || 'Publicación')}</b><span class="pill ${esc(b.estado)}">${esc(b.estado)}</span></div>
+            <button class="btn btn-soft" onclick="verBorrador('${b.id}','${b.estado}')">Ver</button>`
+          : `
+            <div class="cal-info muted">Libre</div>
+            <button class="btn btn-soft" onclick="generarPara('${f}', this)">Generar</button>`}
+        </div>`).join('')}
+    </div>`).join('');
+
+  cont.innerHTML = `
+    <div class="card">
+      <div class="section-label">Agenda</div>
+      <p class="muted">Publica: <b>${esc(resumen)}</b>. ${a.auto ? `Los ${esc(DIAS[a.generacion.dia].toLowerCase())} a las ${esc(a.generacion.hora)} arma solo los borradores de la semana.` : 'La generación automática está apagada.'}
+      ${agendaInfo.ig_conectado ? 'Los aprobados se publican solos a su hora.' : 'Instagram todavía no está conectado: a la hora indicada, publicalo desde el celular con los botones del borrador.'}</p>
+      <div class="acciones">
+        <button class="btn btn-primary" onclick="generarSemana(this)">Generar los que faltan de esta semana</button>
+        <button class="btn btn-soft" onclick="editarAgenda()">Cambiar días y horarios</button>
+      </div>
+      <div id="editor-agenda"></div>
+    </div>
+    ${dias || '<div class="card vacio"><p class="muted">No hay nada en los próximos días.</p></div>'}`;
+}
+
+function verBorrador(id, estado){
+  cambiarTab(document.querySelector(`.tab[data-estado="${estado}"]`));
+  document.getElementById('b-' + id)?.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function generarPara(fechaIso, btn){
+  btn.disabled = true; btn.innerHTML = '<span class="spinner oscuro"></span>';
+  try{
+    await api('POST', '/instagram/generar', { programado_para: fechaIso });
+    toast('Borrador listo para esa fecha');
+    await Promise.all([cargarBorradores(), cargarCandidatos()]);
+  }catch(e){ toast(e.message); btn.disabled = false; btn.textContent = 'Generar'; }
+}
+
+async function generarSemana(btn){
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Generando… (unos segundos por publicación)';
+  try{
+    const r = await api('POST', '/instagram/agenda/generar-semana');
+    toast(r.creados.length ? `Listo: ${r.creados.length} borrador(es) nuevo(s)` : 'La semana ya estaba completa');
+    await Promise.all([cargarBorradores(), cargarCandidatos()]);
+  }catch(e){ toast(e.message); btn.disabled = false; btn.textContent = 'Generar los que faltan de esta semana'; }
+}
+
+function editarAgenda(){
+  const a = agendaInfo.agenda;
+  const hora = (d) => a.slots.find(s => s.dia === d)?.hora || '';
+  document.getElementById('editor-agenda').innerHTML = `
+    <div class="editor-agenda">
+      ${[1,2,3,4,5,6,7].map(d => `
+        <label class="dia-row"><input type="checkbox" id="ag-on-${d}" ${hora(d) ? 'checked' : ''}> ${DIAS[d]}
+          <input type="time" id="ag-h-${d}" value="${hora(d) || '21:00'}"></label>`).join('')}
+      <label class="dia-row"><input type="checkbox" id="ag-auto" ${a.auto ? 'checked' : ''}> Armar solos los borradores los
+        <select id="ag-gen-dia">${[1,2,3,4,5,6,7].map(d => `<option value="${d}" ${d === a.generacion.dia ? 'selected' : ''}>${DIAS[d].toLowerCase()}</option>`).join('')}</select>
+        a las <input type="time" id="ag-gen-h" value="${a.generacion.hora}"></label>
+      <div class="acciones"><button class="btn btn-primary" onclick="guardarAgenda()">Guardar agenda</button></div>
+    </div>`;
+}
+
+async function guardarAgenda(){
+  const slots = [1,2,3,4,5,6,7].filter(d => document.getElementById('ag-on-' + d).checked).map(d => ({ dia: d, hora: document.getElementById('ag-h-' + d).value }));
+  const body = {
+    slots,
+    generacion: { dia: Number(document.getElementById('ag-gen-dia').value), hora: document.getElementById('ag-gen-h').value },
+    auto: document.getElementById('ag-auto').checked,
+  };
+  try{
+    await api('PUT', '/instagram/agenda', body);
+    toast('Agenda guardada');
+    await cargarAgenda(); render();
+  }catch(e){ toast(e.message); }
+}
+
 async function generar(){
   const btn = document.getElementById('btn-generar');
   btn.disabled = true;
@@ -440,9 +684,17 @@ async function guardarCaption(id){
 
 async function cambiarEstado(id, estado){
   try{
-    // Guarda el texto junto con el cambio de estado, por si se editó sin guardar
-    await api('PATCH', `/instagram/borradores/${id}`, { estado, caption: document.getElementById('cap-' + id).value });
-    toast(estado === 'aprobado' ? 'Aprobado' : 'Volvió a borradores');
+    const b = borradores.find(x => x.id === id);
+    const cambios = { estado, caption: document.getElementById('cap-' + id).value }; // guarda el texto por si se editó sin guardar
+    let mensaje = estado === 'aprobado' ? 'Aprobado' : 'Volvió a borradores';
+    if(estado === 'aprobado' && b && !b.programado_para){
+      // Si no tiene fecha, le asignamos el próximo horario libre de la agenda
+      const ocupadas = new Set(borradores.filter(x => x.programado_para).map(x => new Date(x.programado_para).getTime()));
+      const libre = agendaInfo.proximos.find(f => !ocupadas.has(new Date(f).getTime()));
+      if(libre){ cambios.programado_para = libre; mensaje = `Aprobado para el ${fechaLarga(libre)}`; }
+    }
+    await api('PATCH', `/instagram/borradores/${id}`, cambios);
+    toast(mensaje);
     await cargarBorradores();
   }catch(e){ toast(e.message); }
 }
@@ -471,7 +723,7 @@ function iniciar(){
   document.getElementById('cfg-url').value = leer(BACKEND_KEY);
   document.getElementById('cfg-clave').value = leer(CLAVE_KEY);
   if(!leer(CLAVE_KEY)) document.getElementById('config').open = true;
-  cargarBorradores();
+  cargarAgenda().then(cargarBorradores);
   cargarCandidatos();
   cargarPlantillas();
 }

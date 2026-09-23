@@ -103,6 +103,8 @@ Genera publicaciones (borradores) a partir de los productos de `proveedores`. C�
 
 El logo va en `assets/logo-crear-y-jugar.png`.
 
+**Agenda:** por defecto publica martes y jueves 21:00 y sábado 10:00 (hora Argentina), y los domingos 20:00 arma solo los borradores de la semana. Cada borrador tiene `programado_para`; con Instagram conectado, los aprobados se publican solos a esa hora (el servidor revisa cada 5 minutos; `IG_AGENDA=off` lo desactiva).
+
 **Pantalla de revisión:** `instagram.html`. Se sube a Netlify en la misma carpeta que la app y queda en `/instagram.html`. Toma la URL del backend que ya está configurada en la app; la clave de admin se carga una vez en "Conexión".
 
 **Rutas**
@@ -117,4 +119,7 @@ El logo va en `assets/logo-crear-y-jugar.png`.
 - `POST /instagram/borradores/:id/deshacer` — vuelve a la versión anterior
 - `POST /instagram/borradores/:id/guardar-plantilla` — `{ "nombre": "..." }` guarda el diseño como plantilla reutilizable
 - `GET /instagram/plantillas`, `DELETE /instagram/plantillas/:id`
+- `POST /instagram/borradores/:id/marcar-publicado` — para cuando se sube a mano desde el celular
+- `GET /instagram/agenda`, `PUT /instagram/agenda` — días/horarios de publicación y generación automática (se guarda en `config`, clave `instagram_agenda`)
+- `POST /instagram/agenda/generar-semana` — arma los borradores que faltan para los próximos 7 días
 - `POST /instagram/borradores/:id/publicar` — publica un borrador aprobado (requiere las variables de Instagram)
