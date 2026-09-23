@@ -6,7 +6,7 @@
 //   3. le pide a Claude los textos (frase pedagógica, edad, habilidades, caption)
 //   4. renderiza las slides (instagram-render.js) y las sube a Supabase Storage
 //   5. guarda todo como borrador en publicaciones_borrador (borrador -> aprobado -> publicado)
-//   6. publica en Instagram Graph API (preparado; se activa con IG_USER_ID + IG_ACCESS_TOKEN)
+//   6. publica en Instagram (se activa con IG_ACCESS_TOKEN)
 //
 // Integración en server.js (ya hecha):
 //   const registrarInstagramAgente = require('./instagram-agente');
@@ -19,7 +19,10 @@
 //   IG_TEMA                      tema de color por defecto: 'panel' | 'color' | 'crema' (default 'panel')
 //   IG_RECORTE                   'ninguno' (default) | 'removebg'
 //   REMOVEBG_API_KEY             si IG_RECORTE=removebg
-//   IG_USER_ID, IG_ACCESS_TOKEN  cuenta profesional de Instagram + token (para publicar)
+//   IG_ACCESS_TOKEN              token de la cuenta profesional de Instagram (para publicar). Si es un token de
+//                                "inicio de sesión de Instagram" (empieza con IG...) se renueva solo cada semana;
+//                                si es de "inicio de sesión de Facebook" (EAA...) hace falta también IG_USER_ID
+//   IG_USER_ID                   opcional con token de Instagram (se averigua solo)
 //   IG_GRAPH_VERSION             default 'v21.0'
 //   IG_ADMIN_KEY                 clave que exigen las rutas que generan, modifican o publican
 //                                (se manda en el header 'x-admin-key')
@@ -30,7 +33,7 @@ const { htmlDePlantilla, renderHtml } = require('./instagram-render');
 
 const BUCKET = process.env.IG_BUCKET || 'instagram';
 const TEMA = process.env.IG_TEMA || 'panel';
-const GRAPH = `https://graph.facebook.com/${process.env.IG_GRAPH_VERSION || 'v21.0'}`;
+const GRAPH_VERSION = process.env.IG_GRAPH_VERSION || 'v21.0';
 
 // --- Utilidades ---
 
@@ -526,17 +529,82 @@ Devolvé todas las slides con el mismo formato <slide id="N">...</slide> y nada 
 
 // --- 6. Publicación en Instagram (Graph API) ---
 
+// Hay dos formas de conectar la API: con inicio de sesión de Instagram (token IG..., host
+// graph.instagram.com, no necesita página de Facebook) o con inicio de sesión de Facebook (token EAA...,
+// host graph.facebook.com). Se detecta por el token.
+const ig = { token: null, base: null, userId: null, usuario: null };
+
 function igConfigurado() {
-  return Boolean(process.env.IG_USER_ID && process.env.IG_ACCESS_TOKEN);
+  return Boolean(ig.token || process.env.IG_ACCESS_TOKEN);
+}
+
+function esTokenInstagram(t) {
+  return String(t || '').startsWith('IG');
+}
+
+function hostGraph() {
+  return esTokenInstagram(ig.token) ? 'https://graph.instagram.com' : 'https://graph.facebook.com';
 }
 
 async function graph(metodo, ruta, params = {}) {
-  const body = new URLSearchParams({ ...params, access_token: process.env.IG_ACCESS_TOKEN });
-  const url = metodo === 'GET' ? `${GRAPH}/${ruta}?${body}` : `${GRAPH}/${ruta}`;
-  const r = await fetch(url, { method: metodo, body: metodo === 'GET' ? undefined : body });
+  const body = new URLSearchParams({ ...params, access_token: ig.token });
+  const url = `${hostGraph()}/${GRAPH_VERSION}/${ruta}`;
+  const r = await fetch(metodo === 'GET' ? `${url}?${body}` : url, { method: metodo, body: metodo === 'GET' ? undefined : body });
   const data = await r.json().catch(() => ({}));
   if (!r.ok || data.error) throw new Error(`Instagram: ${data.error?.message || r.status}`);
   return data;
+}
+
+// Carga el token vigente: el de la variable de entorno, o el renovado guardado en config si viene de ese
+// mismo token (si alguien carga un token nuevo en Render, se usa el nuevo).
+async function prepararToken(sb) {
+  const env = process.env.IG_ACCESS_TOKEN;
+  if (!env) { ig.token = null; return; }
+  const base = crypto.createHash('sha1').update(env).digest('hex').slice(0, 12);
+  if (ig.base !== base) {
+    const guardado = await leerConfig(sb, 'instagram_token');
+    ig.token = guardado?.base === base && guardado.token ? guardado.token : env;
+    ig.base = base;
+    ig.userId = null;
+  }
+}
+
+// Los tokens de Instagram duran 60 días: se renuevan una vez por semana (necesitan tener 24 h)
+async function renovarTokenSiHaceFalta(sb) {
+  if (!esTokenInstagram(ig.token)) return;
+  const guardado = await leerConfig(sb, 'instagram_token');
+  const ultimo = guardado?.base === ig.base ? Date.parse(guardado.renovado_at || guardado.intento_at || 0) : 0;
+  const esperar = guardado?.renovado_at ? 7 * 86400e3 : 86400e3;
+  if (Date.now() - ultimo < esperar) return;
+  try {
+    const r = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(ig.token)}`);
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.access_token) throw new Error(data.error?.message || r.status);
+    ig.token = data.access_token;
+    await guardarConfig(sb, 'instagram_token', {
+      base: ig.base, token: data.access_token, renovado_at: new Date().toISOString(),
+      vence: new Date(Date.now() + (data.expires_in || 0) * 1000).toISOString(),
+    });
+  } catch (e) {
+    console.error(`[instagram] no se pudo renovar el token: ${e.message}`);
+    await guardarConfig(sb, 'instagram_token', { ...(guardado?.base === ig.base ? guardado : { base: ig.base }), intento_at: new Date().toISOString() });
+  }
+}
+
+// ID y usuario de la cuenta conectada
+async function cuentaIG() {
+  if (!ig.userId) {
+    if (esTokenInstagram(ig.token)) {
+      const me = await graph('GET', 'me', { fields: 'user_id,username' });
+      ig.userId = me.user_id || me.id;
+      ig.usuario = me.username;
+    } else {
+      if (!process.env.IG_USER_ID) throw new Error('Con un token de Facebook hace falta IG_USER_ID');
+      ig.userId = process.env.IG_USER_ID;
+      ig.usuario = (await graph('GET', ig.userId, { fields: 'username' })).username;
+    }
+  }
+  return { id: ig.userId, usuario: ig.usuario };
 }
 
 async function esperarContenedor(id) {
@@ -551,7 +619,7 @@ async function esperarContenedor(id) {
 
 // Publica un carrusel (o una imagen sola) y devuelve el id del posteo
 async function publicarEnInstagram({ slides, caption }) {
-  const usuario = process.env.IG_USER_ID;
+  const { id: usuario } = await cuentaIG();
   let creacion;
   if (slides.length === 1) {
     creacion = (await graph('POST', `${usuario}/media`, { image_url: slides[0], caption: caption || '' })).id;
@@ -670,6 +738,8 @@ const TRANSICIONES = { borrador: ['aprobado'], aprobado: ['borrador'], publicado
 async function cicloAgenda(sb, llamarClaude, estado, ahora = new Date()) {
   if (estado.generando) return;
   try {
+    await prepararToken(sb);
+    await renovarTokenSiHaceFalta(sb);
     const agenda = await leerAgenda(sb);
     const p = partesAR(ahora);
     if (agenda.auto && p.dow === agenda.generacion.dia && p.hm >= agenda.generacion.hora) {
@@ -842,7 +912,8 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
 
   // Publica un borrador aprobado en Instagram
   app.post('/instagram/borradores/:id/publicar', requiereClave, async (req, res) => {
-    if (!igConfigurado()) return err(res, 'Instagram todavía no está conectado (faltan IG_USER_ID e IG_ACCESS_TOKEN)', 501);
+    await prepararToken(sb).catch(() => {});
+    if (!igConfigurado()) return err(res, 'Instagram todavía no está conectado (falta IG_ACCESS_TOKEN en Render)', 501);
     try {
       const b = await buscarBorrador(req.params.id);
       if (!b) return err(res, 'Borrador no encontrado', 404);
@@ -866,11 +937,23 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
     } catch (e) { err(res, e.message); }
   });
 
+  // Estado de la conexión con Instagram (para el botón "Probar conexión")
+  app.get('/instagram/conexion', async (req, res) => {
+    try {
+      await prepararToken(sb);
+      if (!igConfigurado()) return ok(res, { conectado: false, motivo: 'Falta cargar IG_ACCESS_TOKEN en Render' });
+      const cuenta = await cuentaIG();
+      const t = await leerConfig(sb, 'instagram_token');
+      ok(res, { conectado: true, usuario: cuenta.usuario, tipo: esTokenInstagram(ig.token) ? 'instagram' : 'facebook', vence: t?.base === ig.base ? t.vence || null : null });
+    } catch (e) { ok(res, { conectado: false, motivo: e.message }); }
+  });
+
   // --- Agenda ---
 
   app.get('/instagram/agenda', async (req, res) => {
     try {
       const agenda = await leerAgenda(sb);
+      await prepararToken(sb).catch(() => {});
       ok(res, { agenda, ig_conectado: igConfigurado(), proximos: proximosSlots(agenda, new Date(), 14).map((f) => f.toISOString()) });
     } catch (e) { err(res, e.message); }
   });
