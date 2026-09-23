@@ -99,6 +99,7 @@ Genera publicaciones (borradores) a partir de los productos de `proveedores`. CÃ
 | `IG_TEMA` | `panel` (default), `color` o `crema` |
 | `IG_RECORTE` | `ninguno` (default) o `removebg` + `REMOVEBG_API_KEY` |
 | `IG_USER_ID`, `IG_ACCESS_TOKEN` | Cuenta profesional de Instagram (para publicar) |
+| `IG_ADMIN_KEY` | Clave que piden generar, editar, borrar y publicar (header `x-admin-key`) |
 
 El logo va en `assets/logo-crear-y-jugar.png`.
 

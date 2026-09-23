@@ -21,6 +21,8 @@
 //   REMOVEBG_API_KEY             si IG_RECORTE=removebg
 //   IG_USER_ID, IG_ACCESS_TOKEN  cuenta profesional de Instagram + token (para publicar)
 //   IG_GRAPH_VERSION             default 'v21.0'
+//   IG_ADMIN_KEY                 clave que exigen las rutas que generan, modifican o publican
+//                                (se manda en el header 'x-admin-key')
 
 const crypto = require('crypto');
 const sharp = require('sharp');
@@ -295,6 +297,17 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
   const err = (res, msg, status = 500) => res.status(status).json({ ok: false, error: msg });
   let generando = false; // una generación a la vez: el render usa memoria y el plan es chico
 
+  // Las rutas que gastan (Claude, remove.bg), modifican o publican piden la clave de admin:
+  // el backend es público y sin esto cualquiera con la URL podría publicar en la cuenta.
+  const requiereClave = (req, res, next) => {
+    const clave = process.env.IG_ADMIN_KEY;
+    if (!clave) return err(res, 'Falta configurar IG_ADMIN_KEY en el servidor', 503);
+    const enviada = Buffer.from(String(req.get('x-admin-key') || ''));
+    const esperada = Buffer.from(clave);
+    if (enviada.length !== esperada.length || !crypto.timingSafeEqual(enviada, esperada)) return err(res, 'Clave de admin inválida', 401);
+    next();
+  };
+
   const buscarBorrador = async (id) => (await sb('GET', 'publicaciones_borrador', { filter: `id=eq.${encodeURIComponent(id)}` }))?.[0];
 
   // Próximos productos según la rotación (para revisar qué va a elegir el agente)
@@ -309,7 +322,7 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
   });
 
   // Genera un borrador. Body: { tipo: 'unico', producto_id?, tema? }
-  app.post('/instagram/generar', async (req, res) => {
+  app.post('/instagram/generar', requiereClave, async (req, res) => {
     const { tipo = 'unico', producto_id, tema } = req.body || {};
     if (tipo !== 'unico') return err(res, `Tipo de publicación no disponible todavía: ${tipo}`, 400);
     if (generando) return err(res, 'Ya hay una publicación generándose, probá en un rato', 409);
@@ -338,7 +351,7 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
   });
 
   // Editar caption y/o cambiar estado (borrador <-> aprobado). "publicado" solo lo pone /publicar.
-  app.patch('/instagram/borradores/:id', async (req, res) => {
+  app.patch('/instagram/borradores/:id', requiereClave, async (req, res) => {
     try {
       const b = await buscarBorrador(req.params.id);
       if (!b) return err(res, 'Borrador no encontrado', 404);
@@ -354,7 +367,7 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
     } catch (e) { err(res, e.message); }
   });
 
-  app.delete('/instagram/borradores/:id', async (req, res) => {
+  app.delete('/instagram/borradores/:id', requiereClave, async (req, res) => {
     try {
       const b = await buscarBorrador(req.params.id);
       if (!b) return err(res, 'Borrador no encontrado', 404);
@@ -365,7 +378,7 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
   });
 
   // Publica un borrador aprobado en Instagram
-  app.post('/instagram/borradores/:id/publicar', async (req, res) => {
+  app.post('/instagram/borradores/:id/publicar', requiereClave, async (req, res) => {
     if (!igConfigurado()) return err(res, 'Instagram todavía no está conectado (faltan IG_USER_ID e IG_ACCESS_TOKEN)', 501);
     try {
       const b = await buscarBorrador(req.params.id);
