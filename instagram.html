@@ -92,6 +92,16 @@ details.config .row{margin-top:12px;}
 .error-box{background:#FBEAE5;color:var(--coral-dark);font-size:13px;font-weight:600;padding:10px 12px;border-radius:var(--radius-md);margin-top:10px;}
 .vacio{text-align:center;padding:2.5rem 1rem;}
 
+.chat{margin-top:14px;border-top:1px solid var(--line);padding-top:14px;}
+.chat-hist{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;max-height:260px;overflow-y:auto;}
+.msg{font-size:13.5px;line-height:1.45;padding:9px 12px;border-radius:14px;max-width:85%;}
+.msg.yo{align-self:flex-end;background:var(--purple-dark);color:#fff;border-bottom-right-radius:4px;}
+.msg.ia{align-self:flex-start;background:var(--purple-light);color:var(--ink);border-bottom-left-radius:4px;}
+.chat-form{display:flex;gap:8px;}
+.chat-form input{flex:1;}
+.chat-ejemplos{font-size:12px;color:var(--ink-soft);margin-top:6px;}
+.card.procesando .slides{opacity:.45;transition:opacity .2s;}
+.spinner.oscuro{border-color:rgba(82,72,108,.25);border-top-color:var(--purple-dark);}
 .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:14px;font-weight:700;padding:12px 18px;border-radius:var(--radius-md);opacity:0;transition:all .2s;pointer-events:none;max-width:calc(100% - 32px);text-align:center;z-index:10;}
@@ -285,7 +295,49 @@ function tarjeta(b){
       <textarea id="cap-${b.id}" ${editable ? '' : 'readonly'}>${esc(b.caption)}</textarea>
       ${b.error ? `<div class="error-box">Último error al publicar: ${esc(b.error)}</div>` : ''}
       ${acciones ? `<div class="acciones">${acciones}</div>` : ''}
+      ${editable ? chat(b) : ''}
     </div>`;
+}
+
+function chat(b){
+  const hist = (b.contenido?.historial || []).map(h => `<div class="msg yo">${esc(h.mensaje)}</div><div class="msg ia">${esc(h.respuesta)}</div>`).join('');
+  return `
+    <div class="chat">
+      <div class="section-label">Pedile cambios</div>
+      ${hist ? `<div class="chat-hist" id="hist-${b.id}">${hist}</div>` : ''}
+      <form class="chat-form" onsubmit="editar(event,'${b.id}')">
+        <input type="text" id="msg-${b.id}" placeholder="Ej: cambiá el gancho por algo más divertido" autocomplete="off" maxlength="1000">
+        <button class="btn btn-primary" type="submit" id="send-${b.id}">Enviar</button>
+      </form>
+      ${hist ? '' : '<p class="chat-ejemplos">Podés pedir: cambiar textos o la edad, otros colores ("usá los colores de la versión color"), otra foto en la portada, sacar una slide…</p>'}
+    </div>`;
+}
+
+async function editar(ev, id){
+  ev.preventDefault();
+  const input = document.getElementById('msg-' + id);
+  const mensaje = input.value.trim();
+  if(!mensaje) return;
+  const card = document.getElementById('b-' + id);
+  const btn = document.getElementById('send-' + id);
+  card.classList.add('procesando');
+  input.disabled = true; btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try{
+    const { respuesta } = await api('POST', `/instagram/borradores/${id}/editar`, { mensaje });
+    toast(respuesta);
+    await cargarBorradores();
+    // Si estaba aprobado vuelve a borradores: seguimos mostrándolo donde quedó
+    const tab = document.querySelector('.tab[data-estado="borrador"]');
+    if(estadoActual !== 'borrador') cambiarTab(tab);
+    const hist = document.getElementById('hist-' + id);
+    if(hist) hist.scrollTop = hist.scrollHeight;
+    document.getElementById('msg-' + id)?.focus();
+  }catch(e){
+    toast(e.message);
+    card.classList.remove('procesando');
+    input.disabled = false; btn.disabled = false; btn.textContent = 'Enviar';
+  }
 }
 
 async function generar(){

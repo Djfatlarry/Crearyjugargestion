@@ -209,12 +209,40 @@ async function subirSlides(carpeta, pngs) {
   return urls;
 }
 
-// Carrusel de un producto: portada, detalle, qué desarrolla, cierre
+// Carrusel de un producto: por defecto portada, detalle, qué desarrolla y cierre
+const SLIDES_UNICO = { portada: 'unico_portada', detalle: 'unico_detalle', desarrolla: 'unico_desarrolla', cierre: 'cierre' };
+const SLIDES_UNICO_DEFAULT = ['portada', 'detalle', 'desarrolla', 'cierre'];
+const TEMAS_VALIDOS = ['panel', 'color', 'crema'];
+
+async function buscarProducto(sb, id) {
+  const r = await sb('GET', 'proveedores', { select: 'id,nombre,descripcion,categoria,categoria_grande,proveedor,stock,imagenes', filter: `id=eq.${encodeURIComponent(id)}` });
+  return r?.[0];
+}
+
+// Renderiza las slides de un carrusel de producto único y las sube; devuelve las URLs.
+// contenido: textos + fotos elegidas (foto_portada, foto_detalle, foto_miniatura) + orden de slides.
+async function renderizarUnico(producto, contenido, tema) {
+  const fotos = imagenesDe(producto);
+  const orden = contenido.slides?.length ? contenido.slides : SLIDES_UNICO_DEFAULT;
+  const datos = {
+    ...contenido, fotos, tema, total: orden.length,
+    fotoRecortada: contenido.foto_recortada,
+    fotoPortada: contenido.foto_portada, fotoDetalle: contenido.foto_detalle, fotoMiniatura: contenido.foto_miniatura,
+  };
+  // De a una slide por vez para no acumular memoria (plan de 512 MB)
+  const pngs = [];
+  for (const [i, slide] of orden.entries()) {
+    pngs.push(await renderizar(SLIDES_UNICO[slide], { ...datos, indice: i + 1 }));
+  }
+  // Carpeta nueva en cada render: así el navegador e Instagram nunca ven una versión vieja cacheada
+  const carpeta = `publicaciones/${new Date().toISOString().slice(0, 10)}-${crypto.randomUUID().slice(0, 8)}`;
+  return subirSlides(carpeta, pngs);
+}
+
 async function generarProductoUnico(sb, llamarClaude, { productoId, tema = TEMA } = {}) {
   let producto;
   if (productoId) {
-    const r = await sb('GET', 'proveedores', { select: 'id,nombre,descripcion,categoria,categoria_grande,proveedor,stock,imagenes', filter: `id=eq.${encodeURIComponent(productoId)}` });
-    producto = r?.[0];
+    producto = await buscarProducto(sb, productoId);
     if (!producto) throw new Error(`Producto ${productoId} no encontrado`);
     if (!imagenesDe(producto).length) throw new Error(`El producto ${productoId} no tiene fotos`);
   } else {
@@ -228,22 +256,118 @@ async function generarProductoUnico(sb, llamarClaude, { productoId, tema = TEMA 
     fotoRecortada(producto, fotos[0]),
   ]);
 
-  const datos = { ...textos, fotos, fotoRecortada: recorte, tema, total: 4 };
-  // De a una slide por vez para no acumular memoria (plan de 512 MB)
-  const pngs = [];
-  for (const [i, plantilla] of ['unico_portada', 'unico_detalle', 'unico_desarrolla', 'cierre'].entries()) {
-    pngs.push(await renderizar(plantilla, { ...datos, indice: i + 1 }));
-  }
+  const { caption, ...resto } = textos;
+  const contenido = { ...resto, foto_recortada: recorte, slides: SLIDES_UNICO_DEFAULT, historial: [] };
+  const slides = await renderizarUnico(producto, contenido, tema);
 
-  const carpeta = `publicaciones/${new Date().toISOString().slice(0, 10)}-${crypto.randomUUID().slice(0, 8)}`;
-  const slides = await subirSlides(carpeta, pngs);
-
-  const { caption, ...contenido } = textos;
   const [borrador] = await sb('POST', 'publicaciones_borrador', {
-    body: { tipo: 'unico', tema, producto_ids: [producto.id], contenido: { ...contenido, foto_recortada: recorte }, caption, slides },
+    body: { tipo: 'unico', tema, producto_ids: [producto.id], contenido, caption, slides },
     prefer: 'return=representation',
   });
   return borrador;
+}
+
+// --- 5b. Edición por chat ---
+//
+// Claude recibe el estado editable del borrador y el pedido, y devuelve el estado nuevo más una
+// respuesta corta. Solo puede tocar lo que las plantillas exponen (textos, colores, fotos, slides).
+
+function estadoEditable(b, cantFotos) {
+  const c = b.contenido || {};
+  return {
+    tema: b.tema || TEMA,
+    slides: c.slides?.length ? c.slides : SLIDES_UNICO_DEFAULT,
+    foto_portada: c.foto_portada ?? 0,
+    foto_detalle: c.foto_detalle ?? Math.min(1, cantFotos - 1),
+    foto_miniatura: c.foto_miniatura ?? 0,
+    nombre: c.nombre, gancho: c.gancho, edad: c.edad, frase: c.frase, bajada: c.bajada,
+    habilidades: c.habilidades || [],
+    caption: b.caption || '',
+  };
+}
+
+function promptEdicion(producto, estado, cantFotos, historial, mensaje) {
+  const previos = historial.slice(-8).map((h) => `- Pedido: ${h.mensaje}\n  Respuesta: ${h.respuesta}`).join('\n') || '(ninguno)';
+  return `Sos quien edita las publicaciones de Instagram de "Crear y Jugar", una juguetería didáctica de Olivos (Buenos Aires). Escribís en español rioplatense (voseo), con tono cálido y pedagógico.
+
+Producto: ${producto.nombre} — ${producto.descripcion || '(sin descripción)'} (marca: ${producto.proveedor || 'sin dato'})
+
+Es un carrusel de Instagram. Estado actual (JSON):
+${JSON.stringify(estado, null, 2)}
+
+Qué significa cada campo y qué valores acepta:
+- tema: colores del carrusel. "panel" (fondo crema con bloques de color), "color" (cada slide con fondo pleno lavanda/menta/durazno) o "crema" (fondo crema con manchas suaves).
+- slides: qué slides van y en qué orden. Valores posibles: "portada", "detalle", "desarrolla" (¿qué desarrolla? con las habilidades), "cierre" (dónde encontrarnos). Tiene que tener al menos "portada".
+- foto_portada, foto_detalle, foto_miniatura: qué foto del producto va en la portada, en la slide de detalle y en el circulito de la slide "desarrolla". Son índices desde 0; el producto tiene ${cantFotos} foto(s) (índices 0 a ${cantFotos - 1}). "La primera foto" = 0, "la segunda" = 1, etc.
+- nombre (máx. 22 caracteres), gancho (máx. 32, entre signos de exclamación), edad ("+N años" o "N a M años"), frase (máx. 110), bajada (texto de la slide detalle, máx. 100), habilidades (1 a 3, cada una { nombre: 1 a 3 palabras, detalle: máx. 70 }), caption (texto del posteo con hashtags al final).
+
+Reglas:
+- Cambiá solo lo que se pide; el resto queda igual.
+- NUNCA menciones precios, descuentos ni cuotas. No inventes contenidos ni características del producto.
+- Sin emojis en nombre, gancho, frase, bajada ni habilidades.
+- Si el pedido es algo que estos campos no permiten (por ejemplo mover elementos, cambiar tamaños o tipografías, agregar fotos que no existen), no cambies nada y explicalo en la respuesta, diciendo qué sí se puede hacer.
+
+Pedidos anteriores en esta conversación:
+${previos}
+
+Pedido nuevo: ${mensaje}
+
+Devolvé ÚNICAMENTE un JSON válido:
+{ "respuesta": "una o dos oraciones contando qué cambiaste (o por qué no se pudo)", "estado": { ...el estado completo, con los cambios aplicados... } }`;
+}
+
+// Toma el estado propuesto por Claude y lo valida campo por campo contra el actual
+function validarEstado(nuevo, actual, cantFotos) {
+  const e = { ...actual };
+  if (!nuevo || typeof nuevo !== 'object') return e;
+  if (TEMAS_VALIDOS.includes(nuevo.tema)) e.tema = nuevo.tema;
+  if (Array.isArray(nuevo.slides)) {
+    const s = [...new Set(nuevo.slides.filter((x) => SLIDES_UNICO[x]))];
+    if (s.includes('portada')) e.slides = s;
+  }
+  for (const k of ['foto_portada', 'foto_detalle', 'foto_miniatura']) {
+    if (Number.isInteger(nuevo[k]) && nuevo[k] >= 0 && nuevo[k] < cantFotos) e[k] = nuevo[k];
+  }
+  for (const k of ['nombre', 'gancho', 'edad', 'frase', 'bajada', 'caption']) {
+    if (typeof nuevo[k] === 'string' && nuevo[k].trim()) e[k] = nuevo[k].trim();
+  }
+  if (Array.isArray(nuevo.habilidades)) {
+    const h = nuevo.habilidades.filter((x) => x && typeof x.nombre === 'string' && x.nombre.trim())
+      .slice(0, 3).map((x) => ({ nombre: x.nombre.trim(), detalle: typeof x.detalle === 'string' ? x.detalle.trim() : '' }));
+    if (h.length) e.habilidades = h;
+  }
+  if (/\$\s?\d|\bprecios?\b/i.test(e.caption)) e.caption = actual.caption; // nunca precios
+  return e;
+}
+
+async function editarBorrador(sb, llamarClaude, borrador, mensaje) {
+  if (borrador.tipo !== 'unico') throw new Error('Por ahora solo se pueden editar carruseles de un producto');
+  const producto = await buscarProducto(sb, borrador.producto_ids?.[0]);
+  if (!producto) throw new Error('El producto de este borrador ya no existe');
+  const cantFotos = imagenesDe(producto).length;
+  if (!cantFotos) throw new Error('El producto ya no tiene fotos');
+
+  const actual = estadoEditable(borrador, cantFotos);
+  const historial = borrador.contenido?.historial || [];
+  const r = parsearJson(await llamarClaude(promptEdicion(producto, actual, cantFotos, historial, mensaje), { maxTokens: 2000 }));
+  const nuevo = validarEstado(r.estado, actual, cantFotos);
+  const respuesta = typeof r.respuesta === 'string' ? r.respuesta : 'Listo.';
+
+  const { tema, caption, ...resto } = nuevo;
+  const contenido = {
+    ...borrador.contenido, ...resto,
+    historial: [...historial, { mensaje, respuesta, fecha: new Date().toISOString() }].slice(-20),
+  };
+  // Si solo cambió el caption no hace falta volver a renderizar las imágenes
+  const cambioVisual = JSON.stringify({ ...actual, caption: '' }) !== JSON.stringify({ ...nuevo, caption: '' });
+  const slides = cambioVisual ? await renderizarUnico(producto, contenido, tema) : borrador.slides;
+
+  const [actualizado] = await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(borrador.id)}`, {
+    // Si estaba aprobado vuelve a borrador: cambió y hay que mirarlo de nuevo
+    body: { tema, caption, contenido, slides, estado: 'borrador', updated_at: new Date().toISOString() },
+    prefer: 'return=representation',
+  });
+  return { borrador: actualizado, respuesta };
 }
 
 // --- 6. Publicación en Instagram (Graph API) ---
@@ -367,6 +491,22 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
     } catch (e) { err(res, e.message); }
   });
 
+  // Edición por chat: { mensaje: "cambiá el gancho por algo más divertido" }
+  app.post('/instagram/borradores/:id/editar', requiereClave, async (req, res) => {
+    const mensaje = String(req.body?.mensaje || '').trim();
+    if (!mensaje) return err(res, 'Escribí qué querés cambiar', 400);
+    if (mensaje.length > 1000) return err(res, 'El pedido es muy largo', 400);
+    if (generando) return err(res, 'Hay otra publicación procesándose, probá en un rato', 409);
+    generando = true;
+    try {
+      const b = await buscarBorrador(req.params.id);
+      if (!b) return err(res, 'Borrador no encontrado', 404);
+      if (b.estado === 'publicado') return err(res, 'Ya está publicado, no se puede modificar', 400);
+      ok(res, await editarBorrador(sb, llamarClaude, b, mensaje));
+    } catch (e) { err(res, e.message); }
+    finally { generando = false; }
+  });
+
   app.delete('/instagram/borradores/:id', requiereClave, async (req, res) => {
     try {
       const b = await buscarBorrador(req.params.id);
@@ -404,3 +544,4 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
 module.exports.candidatos = candidatos;
 module.exports.promptProductoUnico = promptProductoUnico;
 module.exports.parsearJson = parsearJson;
+module.exports.validarEstado = validarEstado;
