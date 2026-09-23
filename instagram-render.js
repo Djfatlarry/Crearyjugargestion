@@ -309,7 +309,8 @@ const TEMAS = {
 const TEMA_DEFAULT = 'panel';
 
 function temaDe(d, slide) {
-  return (TEMAS[d.tema] || TEMAS[TEMA_DEFAULT])[slide];
+  // Si un tema no define una slide (ej. el cierre, que es compartido), usa la del tema por defecto
+  return (TEMAS[d.tema] || TEMAS[TEMA_DEFAULT])[slide] || TEMAS[TEMA_DEFAULT][slide];
 }
 
 // Posiciones de manchas y chispitas por slide (los colores los pone el tema; null = sin mancha)
@@ -385,10 +386,19 @@ function contador(indice, total, color = COLORES.violeta) {
 //
 // datos comunes: { nombre, gancho, bajada, edad, fotos: [..], fotoRecortada?, habilidades: [{ nombre, detalle }], tema, indice, total }
 // fotoRecortada (PNG sin fondo) se usa solo en la portada; el resto de las slides usa las fotos originales.
+// fotoPortada / fotoDetalle / fotoMiniatura: índice de d.fotos para cada lugar (default 0 / 1 / 0).
+// La foto recortada corresponde a fotos[0], así que solo se usa si la portada usa esa foto.
+
+function fotoDe(d, clave, porDefecto) {
+  const fotos = d.fotos || [];
+  const i = Number.isInteger(d[clave]) ? d[clave] : porDefecto;
+  return fotos[i] || fotos[0];
+}
 
 async function unicoPortada(d) {
   const t = temaDe(d, 'portada');
-  const foto = await cargarImagen(d.fotoRecortada || d.fotos?.[0]);
+  const usaRecorte = Boolean(d.fotoRecortada) && !d.fotoPortada;
+  const foto = await cargarImagen(usaRecorte ? d.fotoRecortada : fotoDe(d, 'fotoPortada', 0));
   return h('div', {
     width: W, height: H, backgroundColor: t.fondo, flexDirection: 'column', alignItems: 'center',
     padding: '56px 72px 52px', color: t.texto, fontFamily: 'Lexend', position: 'relative',
@@ -405,7 +415,7 @@ async function unicoPortada(d) {
     }, d.gancho) : null,
     d.edad ? h('div', { marginTop: 22 }, pastilla(d.edad, { fondo: t.edad[0], color: t.edad[1], tam: 26, peso: 600, padY: 10 })) : null,
     h('div', { flexGrow: 1, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
-      fotoProducto(foto, { ancho: 820, alto: 640, recortada: Boolean(d.fotoRecortada) }),
+      fotoProducto(foto, { ancho: 820, alto: 640, recortada: usaRecorte }),
     ),
     h('div', { width: '100%', justifyContent: 'flex-end', alignItems: 'center', fontSize: 26, fontWeight: 500, marginTop: 12 },
       h('div', { marginRight: 10 }, 'Deslizá'),
@@ -416,7 +426,7 @@ async function unicoPortada(d) {
 
 async function unicoDetalle(d) {
   const t = temaDe(d, 'detalle');
-  const foto = await cargarImagen(d.fotos?.[1] || d.fotos?.[0]);
+  const foto = await cargarImagen(fotoDe(d, 'fotoDetalle', 1));
   return h('div', {
     width: W, height: H, backgroundColor: t.fondo, flexDirection: 'column', alignItems: 'center',
     padding: '56px 72px 52px', color: t.texto, fontFamily: 'Lexend', position: 'relative',
@@ -444,7 +454,7 @@ const ESTILO_HABILIDAD = [
 ];
 
 async function unicoDesarrolla(d) {
-  const foto = await cargarImagen(d.fotos?.[0]);
+  const foto = await cargarImagen(fotoDe(d, 'fotoMiniatura', 0));
   const t = temaDe(d, 'desarrolla');
   const habs = (d.habilidades || []).slice(0, 3);
   // Con cabecera de color, los títulos van en blanco/manteca sobre el panel
