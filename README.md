@@ -83,3 +83,34 @@ SQLite en Railway — ubicada en `/data/cyj.db`. Las tablas son:
 | `config` | Configuración de la app (costos fijos, impuestos, etc.) |
 | `catalogo_custom` | Precios de venta personalizados por producto |
 | `precio_log` | Historial de cambios de precio |
+
+---
+
+## Agente de Instagram
+
+Genera publicaciones (borradores) a partir de los productos de `proveedores`. Código en `instagram-agente.js` (flujo y rutas) e `instagram-render.js` (plantillas 1080x1350 con Satori + resvg, sin navegador). La tabla y el bucket están en `migrations/2026-09-23_instagram_agente.sql`.
+
+**Variables de entorno**
+
+| Variable | Para qué |
+|---|---|
+| `ANTHROPIC_API_KEY` | Textos de cada publicación |
+| `SUPABASE_KEY` | Tiene que poder escribir en Storage (service role) |
+| `IG_TEMA` | `panel` (default), `color` o `crema` |
+| `IG_RECORTE` | `ninguno` (default) o `removebg` + `REMOVEBG_API_KEY` |
+| `IG_USER_ID`, `IG_ACCESS_TOKEN` | Cuenta profesional de Instagram (para publicar) |
+| `IG_ADMIN_KEY` | Clave que piden generar, editar, borrar y publicar (header `x-admin-key`) |
+
+El logo va en `assets/logo-crear-y-jugar.png`.
+
+**Pantalla de revisión:** `instagram.html`. Se sube a Netlify en la misma carpeta que la app y queda en `/instagram.html`. Toma la URL del backend que ya está configurada en la app; la clave de admin se carga una vez en "Conexión".
+
+**Rutas**
+
+- `GET /instagram/candidatos?n=10` — próximos productos según la rotación
+- `POST /instagram/generar` — `{ "producto_id"?: "...", "tema"?: "panel" }` genera un carrusel de un producto y lo guarda como borrador
+- `GET /instagram/borradores?estado=borrador` — lista
+- `GET /instagram/borradores/:id`
+- `PATCH /instagram/borradores/:id` — `{ "caption"?: "...", "estado"?: "aprobado" | "borrador" }`
+- `DELETE /instagram/borradores/:id`
+- `POST /instagram/borradores/:id/publicar` — publica un borrador aprobado (requiere las variables de Instagram)
