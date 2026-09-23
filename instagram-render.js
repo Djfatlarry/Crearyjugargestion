@@ -31,6 +31,8 @@ const FONDOS_PRODUCTO = [COLORES.durazno, COLORES.menta, COLORES.manteca, COLORE
 const CREMA = '#FFF8EE';
 
 const URL_TIENDA = 'crearyjugar.mitiendanube.com';
+const DIRECCION_LOCAL = 'Ricardo Gutiérrez 1215, Olivos';
+const USUARIO_IG = '@crearyjugardidacticos';
 const LOGO_PATH = process.env.IG_LOGO_PATH || path.join(__dirname, 'assets', 'logo-crear-y-jugar.png');
 
 // --- Tipografías (empaquetadas vía @fontsource, sin depender de red en runtime) ---
@@ -220,6 +222,8 @@ function mancha(cx, cy, r, variacion, color) {
 const ICONOS = {
   chispa: 'M12 0 C13 7 17 11 24 12 C17 13 13 17 12 24 C11 17 7 13 0 12 C7 11 11 7 12 0 Z',
   corazon: 'M12 21 C5 15 1 11.5 1 7.5 C1 4.4 3.4 2 6.5 2 C8.6 2 10.6 3.1 12 5 C13.4 3.1 15.4 2 17.5 2 C20.6 2 23 4.4 23 7.5 C23 11.5 19 15 12 21 Z',
+  tienda: 'M2 8.5 L4.2 3 H19.8 L22 8.5 C22 10.2 20.7 11.5 19 11.5 C17.3 11.5 16 10.2 16 8.5 C16 10.2 14.7 11.5 13 11.5 H11 C9.3 11.5 8 10.2 8 8.5 C8 10.2 6.7 11.5 5 11.5 C3.3 11.5 2 10.2 2 8.5 Z M4 13 H20 V21 H14 V16 H10 V21 H4 Z',
+  pin: 'M12 1.5 C7.6 1.5 4.2 4.9 4.2 9.2 C4.2 14.8 12 22.5 12 22.5 C12 22.5 19.8 14.8 19.8 9.2 C19.8 4.9 16.4 1.5 12 1.5 Z M12 12.2 C10.3 12.2 9 10.9 9 9.2 C9 7.5 10.3 6.2 12 6.2 C13.7 6.2 15 7.5 15 9.2 C15 10.9 13.7 12.2 12 12.2 Z',
   flecha: 'M2 10.5 H17.5 L12 5 L14.1 2.9 L23.2 12 L14.1 21.1 L12 19 L17.5 13.5 H2 Z',
   estrella: 'M12 1.5 L15 8.5 L22.5 9.2 L16.8 14.2 L18.5 21.8 L12 17.8 L5.5 21.8 L7.2 14.2 L1.5 9.2 L9 8.5 Z',
 };
@@ -294,11 +298,18 @@ const TEMAS = {
       manchas: [null, null], iconos: [COLORES.manteca, '#F2B8A0', '#8CCFC6'],
       panel: { color: COLORES.lavanda, top: 0, left: 0, right: 0, bottom: 880, radius: '0 0 80px 80px' },
     },
+    cierre: {
+      fondo: CREMA, texto: COLORES.violeta, acento: COLORES.lavanda,
+      manchas: [null, null], iconos: [COLORES.blanco, '#F2B8A0', '#F5D76E'],
+      panel: { color: COLORES.menta, top: 0, left: 0, right: 0, bottom: 640, radius: '0 0 120px 120px' },
+    },
   },
 };
 
+const TEMA_DEFAULT = 'panel';
+
 function temaDe(d, slide) {
-  return (TEMAS[d.tema] || TEMAS.crema)[slide];
+  return (TEMAS[d.tema] || TEMAS[TEMA_DEFAULT])[slide];
 }
 
 // Posiciones de manchas y chispitas por slide (los colores los pone el tema; null = sin mancha)
@@ -318,6 +329,11 @@ const DECORACIONES = {
     iconoSvg('estrella', 90, 180, 30, c[0], -8),
     iconoSvg('chispa', 960, 520, 28, c[1], 0),
     iconoSvg('corazon', 110, 760, 26, c[2], 10),
+  ],
+  cierre: (m, c) => [
+    iconoSvg('chispa', 140, 150, 32, c[0], 0),
+    iconoSvg('corazon', 940, 170, 30, c[1], 12),
+    iconoSvg('estrella', 90, 1200, 30, c[2], -8),
   ],
   desarrolla: (m, c) => [
     m[0] && mancha(0, 60, 250, [1, 1.1, 0.9, 1, 1.2, 0.85, 1.05, 0.9], m[0]),
@@ -471,6 +487,41 @@ async function unicoDesarrolla(d) {
   );
 }
 
+function tarjetaCierre(tipo, colorIcono, fondoIcono, titulo, texto) {
+  return h('div', {
+    backgroundColor: COLORES.blanco, borderRadius: 32, padding: '30px 36px', marginBottom: 24,
+    alignItems: 'center', boxShadow: '0 8px 24px rgba(82,72,108,0.08)',
+  },
+    h('div', { width: 84, height: 84, borderRadius: 84, backgroundColor: fondoIcono, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+      icono(tipo, 42, colorIcono)),
+    h('div', { flexDirection: 'column', marginLeft: 28 },
+      h('div', { fontSize: 24, fontWeight: 600, letterSpacing: 3, color: COLORES.lavanda }, titulo),
+      h('div', { fontSize: 34, fontWeight: 500, marginTop: 6 }, texto),
+    ),
+  );
+}
+
+// Cierre compartido por los carruseles: dónde encontrarnos
+async function cierre(d = {}) {
+  const t = temaDe(d, 'cierre');
+  return h('div', {
+    width: W, height: H, backgroundColor: t.fondo, flexDirection: 'column', alignItems: 'center',
+    padding: '56px 72px 60px', color: t.texto, fontFamily: 'Lexend', position: 'relative',
+  },
+    fondoDecorado('cierre', t),
+    d.indice ? h('div', { width: '100%' }, contador(d.indice, d.total, t.texto)) : null,
+    h('div', { marginTop: 30, padding: 10, borderRadius: 400, backgroundColor: COLORES.blanco, boxShadow: '0 12px 32px rgba(82,72,108,0.12)' }, logo(280)),
+    h('div', { marginTop: 36, fontFamily: 'Playfair Display', fontStyle: 'italic', fontWeight: 400, fontSize: 52 }, 'Encontralos en'),
+    h('div', { fontFamily: 'Playfair Display', fontWeight: 800, fontSize: 88, letterSpacing: 2, lineHeight: 1.05 }, 'CREAR Y JUGAR'),
+    h('div', { flexDirection: 'column', width: '100%', marginTop: 44 },
+      tarjetaCierre('tienda', '#5FB3A8', '#D6EEEA', 'TIENDA ONLINE', 'Link en la bio'),
+      tarjetaCierre('pin', '#E48F6E', '#FBE3D7', 'NUESTRO LOCAL', DIRECCION_LOCAL),
+    ),
+    h('div', { flexGrow: 1 }),
+    h('div', { fontSize: 32, fontWeight: 600, color: t.acento }, USUARIO_IG),
+  );
+}
+
 // --- Render ---
 
 async function aPng(arbol) {
@@ -483,6 +534,7 @@ const PLANTILLAS = {
   unico_portada: unicoPortada,
   unico_detalle: unicoDetalle,
   unico_desarrolla: unicoDesarrolla,
+  cierre,
 };
 
 async function renderizar(plantilla, datos) {
