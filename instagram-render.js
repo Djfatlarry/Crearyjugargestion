@@ -11,6 +11,7 @@ const path = require('path');
 const satori = require('satori').default;
 const { Resvg } = require('@resvg/resvg-js');
 const sharp = require('sharp');
+const { html: parsearHtml } = require('satori-html');
 
 const W = 1080;
 const H = 1350;
@@ -91,6 +92,7 @@ async function normalizar(buf) {
 // Acepta URL http(s), data URI, ruta local o Buffer; devuelve data URI (o null)
 async function cargarImagen(fuenteImg) {
   if (!fuenteImg) return null;
+  if (fuenteImg === 'asset:logo') return logoDataUri();
   if (Buffer.isBuffer(fuenteImg)) return normalizar(fuenteImg);
   if (fuenteImg.startsWith('data:')) return fuenteImg;
   if (/^https?:\/\//.test(fuenteImg)) {
@@ -108,10 +110,17 @@ function logoDataUri() {
   return _logo;
 }
 
+// Referencia a una imagen para el HTML de la slide (URL, ruta local o 'asset:logo'); el archivo
+// se carga recién al renderizar, así el HTML guardado queda liviano y editable.
+function refImagen(fuente) {
+  if (!fuente) return null;
+  if (Buffer.isBuffer(fuente)) return aDataUri(fuente, mimeDeBuffer(fuente));
+  return fuente;
+}
+
 // Si todavía no está el PNG del logo en assets/, dibujamos una aproximación para no bloquear el render
 function logo(tam) {
-  const uri = logoDataUri();
-  if (uri) return img(uri, { width: tam, height: tam, borderRadius: tam });
+  if (logoDataUri()) return img('asset:logo', { width: tam, height: tam, borderRadius: tam });
   return h('div', {
     width: tam, height: tam, borderRadius: tam, backgroundColor: COLORES.lavanda,
     border: `${Math.round(tam * 0.05)}px solid ${COLORES.menta}`,
@@ -141,7 +150,7 @@ async function slideProducto(datos) {
   const { nombre, frase, edad, habilidades = [], indice = 1, total = 1 } = datos;
   const fondo = datos.fondo || FONDOS_PRODUCTO[(indice - 1) % FONDOS_PRODUCTO.length];
   const esBlanco = fondo === COLORES.blanco;
-  const foto = await cargarImagen(datos.foto);
+  const foto = refImagen(datos.foto);
 
   // Sobre fondo blanco, las pastillas blancas necesitan contraste: van en lavanda suave
   const fondoPastilla = esBlanco ? '#EFECF6' : COLORES.blanco;
@@ -216,7 +225,7 @@ function mancha(cx, cy, r, variacion, color) {
     const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
     d += ` C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
   }
-  return `<path d="${d} Z" fill="${color}"/>`;
+  return { type: 'path', props: { d: `${d} Z`, fill: color } };
 }
 
 const ICONOS = {
@@ -230,7 +239,7 @@ const ICONOS = {
 
 function iconoSvg(tipo, x, y, tam, color, rot = 0) {
   const k = tam / 24;
-  return `<path d="${ICONOS[tipo]}" fill="${color}" transform="translate(${x} ${y}) rotate(${rot} ${tam / 2} ${tam / 2}) scale(${k})"/>`;
+  return { type: 'path', props: { d: ICONOS[tipo], fill: color, transform: `translate(${x} ${y}) rotate(${rot} ${tam / 2} ${tam / 2}) scale(${k})` } };
 }
 
 // Nodo SVG de Satori con un ícono (para usar dentro de pastillas/tarjetas)
@@ -352,9 +361,8 @@ function fondoDecorado(slide, t) {
     const { color, radius, ...pos } = t.panel;
     capas.push(h('div', { position: 'absolute', backgroundColor: color, borderRadius: radius, ...pos }));
   }
-  const piezas = DECORACIONES[slide](t.manchas, t.iconos).filter(Boolean).join('');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${piezas}</svg>`;
-  capas.push(img(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`, { position: 'absolute', top: 0, left: 0, width: W, height: H }));
+  const piezas = DECORACIONES[slide](t.manchas, t.iconos).filter(Boolean);
+  capas.push({ type: 'svg', props: { width: W, height: H, viewBox: `0 0 ${W} ${H}`, style: { position: 'absolute', top: 0, left: 0 }, children: piezas } });
   return capas;
 }
 
@@ -398,7 +406,7 @@ function fotoDe(d, clave, porDefecto) {
 async function unicoPortada(d) {
   const t = temaDe(d, 'portada');
   const usaRecorte = Boolean(d.fotoRecortada) && !d.fotoPortada;
-  const foto = await cargarImagen(usaRecorte ? d.fotoRecortada : fotoDe(d, 'fotoPortada', 0));
+  const foto = refImagen(usaRecorte ? d.fotoRecortada : fotoDe(d, 'fotoPortada', 0));
   return h('div', {
     width: W, height: H, backgroundColor: t.fondo, flexDirection: 'column', alignItems: 'center',
     padding: '56px 72px 52px', color: t.texto, fontFamily: 'Lexend', position: 'relative',
@@ -426,7 +434,7 @@ async function unicoPortada(d) {
 
 async function unicoDetalle(d) {
   const t = temaDe(d, 'detalle');
-  const foto = await cargarImagen(fotoDe(d, 'fotoDetalle', 1));
+  const foto = refImagen(fotoDe(d, 'fotoDetalle', 1));
   return h('div', {
     width: W, height: H, backgroundColor: t.fondo, flexDirection: 'column', alignItems: 'center',
     padding: '56px 72px 52px', color: t.texto, fontFamily: 'Lexend', position: 'relative',
@@ -454,7 +462,7 @@ const ESTILO_HABILIDAD = [
 ];
 
 async function unicoDesarrolla(d) {
-  const foto = await cargarImagen(fotoDe(d, 'fotoMiniatura', 0));
+  const foto = refImagen(fotoDe(d, 'fotoMiniatura', 0));
   const t = temaDe(d, 'desarrolla');
   const habs = (d.habilidades || []).slice(0, 3);
   // Con cabecera de color, los títulos van en blanco/manteca sobre el panel
@@ -533,12 +541,81 @@ async function cierre(d = {}) {
   );
 }
 
-// --- Render ---
+// --- HTML editable ---
+//
+// Cada slide se guarda como HTML con estilos en línea: es lo que Claude edita en el chat.
+// Las plantillas arman el árbol, se serializa a HTML y se renderiza siempre desde ese HTML, así lo
+// guardado y lo que se ve son exactamente lo mismo.
 
-async function aPng(arbol) {
-  const svg = await satori(arbol, { width: W, height: H, fonts: fuentes() });
+const SIN_UNIDAD = new Set(['flexGrow', 'flexShrink', 'flex', 'opacity', 'lineHeight', 'fontWeight', 'zIndex']);
+
+function kebab(k) { return k.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase()); }
+function camel(k) { return k.replace(/-([a-z])/g, (_, c) => c.toUpperCase()); }
+function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+function estiloACss(style = {}) {
+  return Object.entries(style)
+    .filter(([, v]) => v !== undefined && v !== null && v !== false)
+    .map(([k, v]) => `${kebab(k)}:${typeof v === 'number' && !SIN_UNIDAD.has(k) ? `${v}px` : v}`)
+    .join(';');
+}
+
+function arbolAHtml(nodo) {
+  if (nodo === null || nodo === undefined || nodo === false) return '';
+  if (Array.isArray(nodo)) return nodo.map(arbolAHtml).join('');
+  if (typeof nodo === 'string' || typeof nodo === 'number') return escHtml(nodo);
+  const { children, style, ...attrs } = nodo.props || {};
+  let a = style && Object.keys(style).length ? ` style="${escHtml(estiloACss(style))}"` : '';
+  for (const [k, v] of Object.entries(attrs)) if (v !== undefined && v !== null) a += ` ${k}="${escHtml(v)}"`;
+  if (nodo.type === 'img') return `<img${a}/>`;
+  return `<${nodo.type}${a}>${arbolAHtml(children)}</${nodo.type}>`;
+}
+
+function decodificar(s) {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp|#39);/gi, (m, e) => {
+    const l = e.toLowerCase();
+    if (l[0] === '#') return String.fromCodePoint(l[1] === 'x' ? parseInt(l.slice(2), 16) : parseInt(l.slice(1), 10));
+    return { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }[l];
+  });
+}
+
+// Normaliza lo que devuelve satori-html: decodifica entidades, pasa números a número y
+// carga las imágenes (con caché compartida entre slides de una misma publicación)
+async function prepararNodo(nodo, cache) {
+  if (typeof nodo === 'string') return decodificar(nodo);
+  if (!nodo || typeof nodo !== 'object') return nodo;
+  const props = { ...nodo.props };
+  if (props.style) {
+    const st = {};
+    for (const [k, v] of Object.entries(props.style)) {
+      const key = k.includes('-') ? camel(k) : k;
+      st[key] = typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : v;
+    }
+    props.style = st;
+  }
+  if (nodo.type === 'img') {
+    if (!cache.has(props.src)) cache.set(props.src, cargarImagen(props.src));
+    const src = await cache.get(props.src);
+    if (!src) throw new Error(`Imagen no disponible: ${String(props.src).slice(0, 80)}`);
+    props.src = src;
+  }
+  const hijos = Array.isArray(props.children) ? props.children : props.children !== undefined ? [props.children] : [];
+  props.children = await Promise.all(hijos.map((c) => prepararNodo(c, cache)));
+  if (!props.children.length) delete props.children;
+  return { type: nodo.type, props };
+}
+
+async function renderHtml(html, cache = new Map()) {
+  let arbol = parsearHtml(html);
+  // satori-html envuelve todo en un div contenedor: si hay un único elemento raíz, nos quedamos con ese
+  const hijos = (arbol.props.children || []).filter((c) => typeof c !== 'string' || c.trim());
+  if (hijos.length === 1 && typeof hijos[0] === 'object') arbol = hijos[0];
+  const listo = await prepararNodo(arbol, cache);
+  const svg = await satori(listo, { width: W, height: H, fonts: fuentes() });
   return new Resvg(svg, { fitTo: { mode: 'width', value: W } }).render().asPng();
 }
+
+// --- Render ---
 
 const PLANTILLAS = {
   producto: slideProducto,
@@ -548,10 +625,14 @@ const PLANTILLAS = {
   cierre,
 };
 
-async function renderizar(plantilla, datos) {
+async function htmlDePlantilla(plantilla, datos) {
   const fn = PLANTILLAS[plantilla];
   if (!fn) throw new Error(`Plantilla desconocida: ${plantilla}`);
-  return aPng(await fn(datos));
+  return arbolAHtml(await fn(datos));
 }
 
-module.exports = { renderizar, COLORES, W, H };
+async function renderizar(plantilla, datos) {
+  return renderHtml(await htmlDePlantilla(plantilla, datos));
+}
+
+module.exports = { renderizar, htmlDePlantilla, renderHtml, COLORES, W, H };

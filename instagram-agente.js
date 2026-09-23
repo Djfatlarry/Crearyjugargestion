@@ -26,7 +26,7 @@
 
 const crypto = require('crypto');
 const sharp = require('sharp');
-const { renderizar } = require('./instagram-render');
+const { htmlDePlantilla, renderHtml } = require('./instagram-render');
 
 const BUCKET = process.env.IG_BUCKET || 'instagram';
 const TEMA = process.env.IG_TEMA || 'panel';
@@ -212,16 +212,15 @@ async function subirSlides(carpeta, pngs) {
 // Carrusel de un producto: por defecto portada, detalle, qué desarrolla y cierre
 const SLIDES_UNICO = { portada: 'unico_portada', detalle: 'unico_detalle', desarrolla: 'unico_desarrolla', cierre: 'cierre' };
 const SLIDES_UNICO_DEFAULT = ['portada', 'detalle', 'desarrolla', 'cierre'];
-const TEMAS_VALIDOS = ['panel', 'color', 'crema'];
+const MODELO_DISENO = 'claude-opus-5';
 
 async function buscarProducto(sb, id) {
   const r = await sb('GET', 'proveedores', { select: 'id,nombre,descripcion,categoria,categoria_grande,proveedor,stock,imagenes', filter: `id=eq.${encodeURIComponent(id)}` });
   return r?.[0];
 }
 
-// Renderiza las slides de un carrusel de producto único y las sube; devuelve las URLs.
-// contenido: textos + fotos elegidas (foto_portada, foto_detalle, foto_miniatura) + orden de slides.
-async function renderizarUnico(producto, contenido, tema) {
+// HTML de cada slide a partir de las plantillas de código (panel / color / crema)
+async function htmlSlidesUnico(producto, contenido, tema) {
   const fotos = imagenesDe(producto);
   const orden = contenido.slides?.length ? contenido.slides : SLIDES_UNICO_DEFAULT;
   const datos = {
@@ -229,17 +228,46 @@ async function renderizarUnico(producto, contenido, tema) {
     fotoRecortada: contenido.foto_recortada,
     fotoPortada: contenido.foto_portada, fotoDetalle: contenido.foto_detalle, fotoMiniatura: contenido.foto_miniatura,
   };
-  // De a una slide por vez para no acumular memoria (plan de 512 MB)
+  const html = [];
+  for (const [i, slide] of orden.entries()) html.push(await htmlDePlantilla(SLIDES_UNICO[slide], { ...datos, indice: i + 1 }));
+  return html;
+}
+
+// Renderiza y sube un carrusel a partir del HTML de sus slides; devuelve las URLs públicas.
+// De a una slide por vez para no acumular memoria (plan de 512 MB).
+async function renderizarYSubir(htmlSlides) {
+  const cache = new Map();
   const pngs = [];
-  for (const [i, slide] of orden.entries()) {
-    pngs.push(await renderizar(SLIDES_UNICO[slide], { ...datos, indice: i + 1 }));
-  }
+  for (const html of htmlSlides) pngs.push(await renderHtml(html, cache));
   // Carpeta nueva en cada render: así el navegador e Instagram nunca ven una versión vieja cacheada
   const carpeta = `publicaciones/${new Date().toISOString().slice(0, 10)}-${crypto.randomUUID().slice(0, 8)}`;
   return subirSlides(carpeta, pngs);
 }
 
-async function generarProductoUnico(sb, llamarClaude, { productoId, tema = TEMA } = {}) {
+// --- Plantillas guardadas (diseños creados desde el chat) ---
+//
+// Son las slides de un borrador con el contenido del producto reemplazado por marcadores.
+
+const MARCADORES_TEXTO = ['nombre', 'gancho', 'edad', 'frase', 'bajada', 'habilidad1', 'detalle1', 'habilidad2', 'detalle2', 'habilidad3', 'detalle3'];
+const MARCADORES_FOTO = ['foto_principal', 'foto_secundaria'];
+
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function valoresMarcadores(textos, fotos) {
+  const v = { nombre: textos.nombre, gancho: textos.gancho, edad: textos.edad, frase: textos.frase, bajada: textos.bajada };
+  (textos.habilidades || []).forEach((h, i) => { v[`habilidad${i + 1}`] = h.nombre; v[`detalle${i + 1}`] = h.detalle; });
+  v.foto_principal = fotos[0];
+  v.foto_secundaria = fotos[1] || fotos[0];
+  return v;
+}
+
+function completarPlantilla(htmlSlides, valores) {
+  return htmlSlides.map((html) => html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (_, k) => escHtml(valores[k] ?? '')));
+}
+
+async function generarProductoUnico(sb, llamarClaude, { productoId, tema = TEMA, plantillaId } = {}) {
   let producto;
   if (productoId) {
     producto = await buscarProducto(sb, productoId);
@@ -250,18 +278,29 @@ async function generarProductoUnico(sb, llamarClaude, { productoId, tema = TEMA 
     if (!producto) throw new Error('No hay productos con foto y stock para publicar');
   }
 
+  let plantilla = null;
+  if (plantillaId) {
+    plantilla = (await sb('GET', 'plantillas_instagram', { filter: `id=eq.${encodeURIComponent(plantillaId)}` }))?.[0];
+    if (!plantilla) throw new Error('Plantilla no encontrada');
+  }
+
   const fotos = imagenesDe(producto);
   const [textos, recorte] = await Promise.all([
     textosProducto(llamarClaude, producto),
-    fotoRecortada(producto, fotos[0]),
+    plantilla ? null : fotoRecortada(producto, fotos[0]),
   ]);
 
   const { caption, ...resto } = textos;
-  const contenido = { ...resto, foto_recortada: recorte, slides: SLIDES_UNICO_DEFAULT, historial: [] };
-  const slides = await renderizarUnico(producto, contenido, tema);
+  const contenido = { ...resto, foto_recortada: recorte, historial: [], versiones: [] };
+  if (plantilla) contenido.plantilla = { id: plantilla.id, nombre: plantilla.nombre };
+  else contenido.slides = SLIDES_UNICO_DEFAULT;
+  contenido.html_slides = plantilla
+    ? completarPlantilla(plantilla.slides, valoresMarcadores(textos, fotos))
+    : await htmlSlidesUnico(producto, contenido, tema);
+  const slides = await renderizarYSubir(contenido.html_slides);
 
   const [borrador] = await sb('POST', 'publicaciones_borrador', {
-    body: { tipo: 'unico', tema, producto_ids: [producto.id], contenido, caption, slides },
+    body: { tipo: 'unico', tema: plantilla ? `plantilla: ${plantilla.nombre}` : tema, producto_ids: [producto.id], contenido, caption, slides },
     prefer: 'return=representation',
   });
   return borrador;
@@ -269,105 +308,216 @@ async function generarProductoUnico(sb, llamarClaude, { productoId, tema = TEMA 
 
 // --- 5b. Edición por chat ---
 //
-// Claude recibe el estado editable del borrador y el pedido, y devuelve el estado nuevo más una
-// respuesta corta. Solo puede tocar lo que las plantillas exponen (textos, colores, fotos, slides).
+// Conversación libre con Claude sobre el borrador. Claude ve cómo quedaron las slides (imágenes) y su
+// HTML, y devuelve las slides que cambia. Todo lo que devuelve se valida renderizándolo antes de guardar.
 
-function estadoEditable(b, cantFotos) {
-  const c = b.contenido || {};
-  return {
-    tema: b.tema || TEMA,
-    slides: c.slides?.length ? c.slides : SLIDES_UNICO_DEFAULT,
-    foto_portada: c.foto_portada ?? 0,
-    foto_detalle: c.foto_detalle ?? Math.min(1, cantFotos - 1),
-    foto_miniatura: c.foto_miniatura ?? 0,
-    nombre: c.nombre, gancho: c.gancho, edad: c.edad, frase: c.frase, bajada: c.bajada,
-    habilidades: c.habilidades || [],
-    caption: b.caption || '',
-  };
+const SISTEMA_DISENO = `Sos quien diseña las publicaciones de Instagram de "Crear y Jugar", una juguetería didáctica de Olivos (Buenos Aires). Conversás con la dueña del local, que no es técnica: respondele en español rioplatense (voseo), con calidez y en pocas palabras. Nunca le hables de HTML, CSS ni código: hablale de lo que se ve.
+
+Trabajás sobre un carrusel de slides de 1080x1350 px. Cada slide es HTML con estilos en línea que se dibuja con Satori (no es un navegador). Reglas técnicas obligatorias:
+- La raíz de cada slide es un único <div> con width:1080px;height:1350px;position:relative.
+- Solo flexbox. Todo <div> lleva display:flex explícito. No existen grid, float ni display:block/inline.
+- Estilos solo en el atributo style. Nada de <style>, clases, <script>, <p> ni <span>: el texto va dentro de <div>.
+- position:absolute está permitido (con top/left/right/bottom en px).
+- Tipografías disponibles, y ninguna otra: 'Playfair Display' (normal 700 y 800; italic 400 y 700) y Lexend (400, 500, 600).
+- Imágenes: solo <img> con un src de la lista que te paso, siempre con width y height en px. Podés usar object-fit (cover o contain), border-radius y transform.
+- Formas y decoraciones: <svg> con <path>, <circle> o <rect> (atributos fill y transform), con width, height y viewBox.
+- Soportado: border, border-radius, box-shadow, opacity, transform (rotate, translate, scale), background-color, background-image con linear-gradient, letter-spacing, text-transform, line-height, text-align, gap, padding, margin.
+- Paleta de la marca: lavanda #8F83B9, durazno #F7D5C4, menta #BCE3DE, manteca #FFF0B3, violeta oscuro #52486C (textos), crema #FFF8EE, blanco.
+
+Contenido: nunca precios, descuentos ni cuotas; no inventes características del producto; sin emojis en las imágenes. Si cambia la cantidad de slides, actualizá los contadores tipo "2 / 4".
+
+Respondé siempre con este formato:
+<respuesta>lo que le decís (1 a 3 oraciones)</respuesta>
+Por cada slide que modificás o agregás, el HTML completo:
+<slide id="N">...</slide>   (N = número de la slide que reemplazás, o nueva1, nueva2... para slides nuevas)
+Si cambia el orden, sacás o agregás slides, la lista final: <orden>1,2,nueva1,4</orden> (lo que no aparece se elimina). Si no cambia, no lo pongas.
+Si cambia el texto del posteo: <caption>texto completo</caption>
+Si es una pregunta o un comentario sin cambios, respondé solo con <respuesta>. Si algo no se puede hacer, decilo y ofrecé una alternativa.`;
+
+function extraer(texto, tag) {
+  const m = texto.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+  return m ? m[1].trim() : null;
 }
 
-function promptEdicion(producto, estado, cantFotos, historial, mensaje) {
-  const previos = historial.slice(-8).map((h) => `- Pedido: ${h.mensaje}\n  Respuesta: ${h.respuesta}`).join('\n') || '(ninguno)';
-  return `Sos quien edita las publicaciones de Instagram de "Crear y Jugar", una juguetería didáctica de Olivos (Buenos Aires). Escribís en español rioplatense (voseo), con tono cálido y pedagógico.
-
-Producto: ${producto.nombre} — ${producto.descripcion || '(sin descripción)'} (marca: ${producto.proveedor || 'sin dato'})
-
-Es un carrusel de Instagram. Estado actual (JSON):
-${JSON.stringify(estado, null, 2)}
-
-Qué significa cada campo y qué valores acepta:
-- tema: colores del carrusel. "panel" (fondo crema con bloques de color), "color" (cada slide con fondo pleno lavanda/menta/durazno) o "crema" (fondo crema con manchas suaves).
-- slides: qué slides van y en qué orden. Valores posibles: "portada", "detalle", "desarrolla" (¿qué desarrolla? con las habilidades), "cierre" (dónde encontrarnos). Tiene que tener al menos "portada".
-- foto_portada, foto_detalle, foto_miniatura: qué foto del producto va en la portada, en la slide de detalle y en el circulito de la slide "desarrolla". Son índices desde 0; el producto tiene ${cantFotos} foto(s) (índices 0 a ${cantFotos - 1}). "La primera foto" = 0, "la segunda" = 1, etc.
-- nombre (máx. 22 caracteres), gancho (máx. 32, entre signos de exclamación), edad ("+N años" o "N a M años"), frase (máx. 110), bajada (texto de la slide detalle, máx. 100), habilidades (1 a 3, cada una { nombre: 1 a 3 palabras, detalle: máx. 70 }), caption (texto del posteo con hashtags al final).
-
-Reglas:
-- Cambiá solo lo que se pide; el resto queda igual.
-- NUNCA menciones precios, descuentos ni cuotas. No inventes contenidos ni características del producto.
-- Sin emojis en nombre, gancho, frase, bajada ni habilidades.
-- Si el pedido es algo que estos campos no permiten (por ejemplo mover elementos, cambiar tamaños o tipografías, agregar fotos que no existen), no cambies nada y explicalo en la respuesta, diciendo qué sí se puede hacer.
-
-Pedidos anteriores en esta conversación:
-${previos}
-
-Pedido nuevo: ${mensaje}
-
-Devolvé ÚNICAMENTE un JSON válido:
-{ "respuesta": "una o dos oraciones contando qué cambiaste (o por qué no se pudo)", "estado": { ...el estado completo, con los cambios aplicados... } }`;
+function extraerSlides(texto) {
+  const slides = {};
+  for (const m of texto.matchAll(/<slide id="([^"]+)">([\s\S]*?)<\/slide>/g)) slides[m[1].trim()] = m[2].trim();
+  return slides;
 }
 
-// Toma el estado propuesto por Claude y lo valida campo por campo contra el actual
-function validarEstado(nuevo, actual, cantFotos) {
-  const e = { ...actual };
-  if (!nuevo || typeof nuevo !== 'object') return e;
-  if (TEMAS_VALIDOS.includes(nuevo.tema)) e.tema = nuevo.tema;
-  if (Array.isArray(nuevo.slides)) {
-    const s = [...new Set(nuevo.slides.filter((x) => SLIDES_UNICO[x]))];
-    if (s.includes('portada')) e.slides = s;
+// Imágenes que puede usar una slide: fotos del producto, recorte y logo (nada de URLs externas)
+function fuentesPermitidas(producto, contenido) {
+  return new Set(['asset:logo', ...imagenesDe(producto), contenido.foto_recortada].filter(Boolean));
+}
+
+async function validarSlide(html, permitidas, cache) {
+  if (/<script|<style|\son\w+\s*=/i.test(html)) throw new Error('contiene elementos no permitidos (script, style o eventos)');
+  for (const m of html.matchAll(/<img[^>]*\ssrc="([^"]*)"/gi)) {
+    if (!permitidas.has(m[1].replace(/&amp;/g, '&'))) throw new Error(`usa una imagen que no está en la lista: ${m[1].slice(0, 80)}`);
   }
-  for (const k of ['foto_portada', 'foto_detalle', 'foto_miniatura']) {
-    if (Number.isInteger(nuevo[k]) && nuevo[k] >= 0 && nuevo[k] < cantFotos) e[k] = nuevo[k];
+  return renderHtml(html, cache);
+}
+
+// Miniaturas JPEG de las slides actuales, para que Claude vea cómo quedó cada una
+async function miniaturas(urls) {
+  const out = [];
+  for (const url of urls) {
+    try {
+      const jpg = await sharp(await bajar(url)).resize(540).jpeg({ quality: 80 }).toBuffer();
+      out.push(jpg.toString('base64'));
+    } catch { out.push(null); }
   }
-  for (const k of ['nombre', 'gancho', 'edad', 'frase', 'bajada', 'caption']) {
-    if (typeof nuevo[k] === 'string' && nuevo[k].trim()) e[k] = nuevo[k].trim();
-  }
-  if (Array.isArray(nuevo.habilidades)) {
-    const h = nuevo.habilidades.filter((x) => x && typeof x.nombre === 'string' && x.nombre.trim())
-      .slice(0, 3).map((x) => ({ nombre: x.nombre.trim(), detalle: typeof x.detalle === 'string' ? x.detalle.trim() : '' }));
-    if (h.length) e.habilidades = h;
-  }
-  if (/\$\s?\d|\bprecios?\b/i.test(e.caption)) e.caption = actual.caption; // nunca precios
-  return e;
+  return out;
 }
 
 async function editarBorrador(sb, llamarClaude, borrador, mensaje) {
   if (borrador.tipo !== 'unico') throw new Error('Por ahora solo se pueden editar carruseles de un producto');
   const producto = await buscarProducto(sb, borrador.producto_ids?.[0]);
   if (!producto) throw new Error('El producto de este borrador ya no existe');
-  const cantFotos = imagenesDe(producto).length;
-  if (!cantFotos) throw new Error('El producto ya no tiene fotos');
+  const contenido = { ...(borrador.contenido || {}) };
+  // Borradores generados antes del chat libre: se arma el HTML desde las plantillas
+  const htmlActual = contenido.html_slides?.length ? contenido.html_slides : await htmlSlidesUnico(producto, contenido, borrador.tema || TEMA);
+  const historial = contenido.historial || [];
+  const permitidas = fuentesPermitidas(producto, contenido);
 
-  const actual = estadoEditable(borrador, cantFotos);
-  const historial = borrador.contenido?.historial || [];
-  const r = parsearJson(await llamarClaude(promptEdicion(producto, actual, cantFotos, historial, mensaje), { maxTokens: 2000 }));
-  const nuevo = validarEstado(r.estado, actual, cantFotos);
-  const respuesta = typeof r.respuesta === 'string' ? r.respuesta : 'Listo.';
+  const imgs = await miniaturas(borrador.slides || []);
+  const bloques = [];
+  htmlActual.forEach((_, i) => {
+    bloques.push({ type: 'text', text: `Slide ${i + 1} (así se ve ahora):` });
+    if (imgs[i]) bloques.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imgs[i] } });
+  });
+  bloques.push({
+    type: 'text',
+    text: `Producto: ${producto.nombre} — ${producto.descripcion || '(sin descripción)'} (marca: ${producto.proveedor || 'sin dato'})
 
-  const { tema, caption, ...resto } = nuevo;
-  const contenido = {
-    ...borrador.contenido, ...resto,
-    historial: [...historial, { mensaje, respuesta, fecha: new Date().toISOString() }].slice(-20),
+Imágenes que podés usar en src: ${[...permitidas].join(' , ')}
+
+HTML actual de cada slide:
+${htmlActual.map((h, i) => `<slide id="${i + 1}">${h}</slide>`).join('\n')}
+
+Texto actual del posteo:
+<caption>${borrador.caption || ''}</caption>
+
+Pedido: ${mensaje}`,
+  });
+
+  // Conversación previa (solo texto) + el pedido nuevo con imágenes y HTML
+  const conversacion = [];
+  for (const h of historial.slice(-6)) {
+    conversacion.push({ role: 'user', content: h.mensaje }, { role: 'assistant', content: h.respuesta });
+  }
+  conversacion.push({ role: 'user', content: bloques });
+
+  const opciones = { model: MODELO_DISENO, maxTokens: 16000, system: SISTEMA_DISENO, effort: 'medium', fallback: true };
+  let salida = await llamarClaude(conversacion, opciones);
+  let respuesta = extraer(salida, 'respuesta') || salida.replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, '').trim() || 'Listo.';
+  let nuevas = extraerSlides(salida);
+  const ordenTxt = extraer(salida, 'orden');
+  const caption = extraer(salida, 'caption');
+
+  // Validar las slides nuevas renderizándolas; si alguna falla, un reintento pidiendo la corrección
+  const cache = new Map();
+  const errores = async () => {
+    const e = {};
+    for (const [id, html] of Object.entries(nuevas)) {
+      try { await validarSlide(html, permitidas, cache); } catch (err) { e[id] = err.message; }
+    }
+    return e;
   };
-  // Si solo cambió el caption no hace falta volver a renderizar las imágenes
-  const cambioVisual = JSON.stringify({ ...actual, caption: '' }) !== JSON.stringify({ ...nuevo, caption: '' });
-  const slides = cambioVisual ? await renderizarUnico(producto, contenido, tema) : borrador.slides;
+  let fallidas = await errores();
+  if (Object.keys(fallidas).length) {
+    const detalle = Object.entries(fallidas).map(([id, m]) => `- Slide ${id}: ${m}`).join('\n');
+    const retry = await llamarClaude([
+      ...conversacion,
+      { role: 'assistant', content: salida },
+      { role: 'user', content: `Estas slides dieron error al dibujarse:\n${detalle}\nCorregilas respetando las reglas técnicas. Devolvé solo esas slides con el mismo formato <slide id="...">...</slide>.` },
+    ], opciones);
+    Object.assign(nuevas, extraerSlides(retry));
+    fallidas = await errores();
+    for (const id of Object.keys(fallidas)) delete nuevas[id];
+  }
+
+  // Armar la lista final de slides
+  const orden = ordenTxt
+    ? ordenTxt.split(',').map((x) => x.trim()).filter(Boolean)
+    : [...htmlActual.map((_, i) => String(i + 1)), ...Object.keys(nuevas).filter((id) => !/^\d+$/.test(id))];
+  const htmlFinal = orden.map((id) => nuevas[id] ?? (/^\d+$/.test(id) ? htmlActual[Number(id) - 1] : undefined)).filter(Boolean);
+  if (!htmlFinal.length) throw new Error('El cambio dejaba el carrusel sin slides; no se aplicó');
+
+  const cambioSlides = JSON.stringify(htmlFinal) !== JSON.stringify(htmlActual);
+  const captionFinal = caption && !/\$\s?\d|\bprecios?\b/i.test(caption) ? caption : borrador.caption;
+  if (Object.keys(fallidas).length) {
+    respuesta += ' (Hubo una parte que no pude dibujar bien, así que esa slide quedó como estaba.)';
+  }
+
+  const hubo = cambioSlides || captionFinal !== borrador.caption;
+  const versiones = contenido.versiones || [];
+  if (hubo) versiones.push({ html_slides: htmlActual, slides: borrador.slides, caption: borrador.caption, fecha: new Date().toISOString() });
+
+  const slides = cambioSlides ? await renderizarYSubir(htmlFinal) : borrador.slides;
+  const nuevoContenido = {
+    ...contenido,
+    html_slides: htmlFinal,
+    versiones: versiones.slice(-15),
+    historial: [...historial, { mensaje, respuesta, fecha: new Date().toISOString() }].slice(-30),
+  };
 
   const [actualizado] = await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(borrador.id)}`, {
-    // Si estaba aprobado vuelve a borrador: cambió y hay que mirarlo de nuevo
-    body: { tema, caption, contenido, slides, estado: 'borrador', updated_at: new Date().toISOString() },
+    // Si estaba aprobado y cambió, vuelve a borrador para mirarlo de nuevo
+    body: { caption: captionFinal, contenido: nuevoContenido, slides, ...(hubo ? { estado: 'borrador' } : {}), updated_at: new Date().toISOString() },
     prefer: 'return=representation',
   });
   return { borrador: actualizado, respuesta };
+}
+
+async function deshacerBorrador(sb, borrador) {
+  const contenido = { ...(borrador.contenido || {}) };
+  const versiones = [...(contenido.versiones || [])];
+  const anterior = versiones.pop();
+  if (!anterior) throw new Error('No hay cambios para deshacer');
+  const historial = [...(contenido.historial || []), { mensaje: '(deshacer)', respuesta: 'Volví a la versión anterior.', fecha: new Date().toISOString() }];
+  const [actualizado] = await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(borrador.id)}`, {
+    body: {
+      caption: anterior.caption, slides: anterior.slides, estado: 'borrador', updated_at: new Date().toISOString(),
+      contenido: { ...contenido, html_slides: anterior.html_slides, versiones, historial: historial.slice(-30) },
+    },
+    prefer: 'return=representation',
+  });
+  return actualizado;
+}
+
+// Convierte el diseño de un borrador en plantilla: Claude reemplaza lo propio del producto por marcadores
+async function guardarComoPlantilla(sb, llamarClaude, borrador, nombre) {
+  const producto = await buscarProducto(sb, borrador.producto_ids?.[0]);
+  if (!producto) throw new Error('El producto de este borrador ya no existe');
+  const contenido = borrador.contenido || {};
+  const html = contenido.html_slides?.length ? contenido.html_slides : await htmlSlidesUnico(producto, contenido, borrador.tema || TEMA);
+  const fotos = imagenesDe(producto);
+
+  const prompt = `Tengo el diseño de un carrusel de Instagram (HTML de cada slide) hecho para un producto puntual. Quiero reutilizar el diseño para otros productos.
+Reemplazá el contenido propio de ESTE producto por marcadores, sin cambiar nada del diseño:
+- Textos: {{nombre}}, {{gancho}}, {{edad}}, {{frase}}, {{bajada}}, {{habilidad1}}, {{detalle1}}, {{habilidad2}}, {{detalle2}}, {{habilidad3}}, {{detalle3}}. Usá el que mejor corresponda a cada texto; si un texto propio del producto no encaja en ninguno, usá el más parecido.
+- Fotos del producto en el src de <img>: {{foto_principal}} y {{foto_secundaria}}. Las fotos del producto son: ${[...fotos, contenido.foto_recortada].filter(Boolean).join(' , ')}. El logo (asset:logo) queda igual.
+- Lo que es de la marca y no del producto (dirección, usuario de Instagram, web, "Deslizá", contadores tipo "2 / 4", títulos genéricos como "¿qué desarrolla?") queda igual.
+
+${html.map((h, i) => `<slide id="${i + 1}">${h}</slide>`).join('\n')}
+
+Devolvé todas las slides con el mismo formato <slide id="N">...</slide> y nada más.`;
+  const salida = await llamarClaude(prompt, { model: MODELO_DISENO, maxTokens: 16000, effort: 'low', fallback: true });
+  const slidesPlantilla = extraerSlides(salida);
+  const lista = html.map((_, i) => slidesPlantilla[String(i + 1)]).filter(Boolean);
+  if (lista.length !== html.length || !lista.join('').includes('{{')) throw new Error('No se pudo armar la plantilla; probá de nuevo');
+
+  // Prueba: completar con los datos de este producto y dibujar cada slide
+  const valores = valoresMarcadores({ ...contenido, habilidades: contenido.habilidades || [] }, fotos);
+  const cache = new Map();
+  for (const h of completarPlantilla(lista, valores)) await renderHtml(h, cache);
+
+  const [plantilla] = await sb('POST', 'plantillas_instagram', {
+    body: { nombre, slides: lista, creado_desde: borrador.id },
+    prefer: 'return=representation',
+  });
+  return plantilla;
 }
 
 // --- 6. Publicación en Instagram (Graph API) ---
@@ -447,12 +597,12 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
 
   // Genera un borrador. Body: { tipo: 'unico', producto_id?, tema? }
   app.post('/instagram/generar', requiereClave, async (req, res) => {
-    const { tipo = 'unico', producto_id, tema } = req.body || {};
+    const { tipo = 'unico', producto_id, tema, plantilla_id } = req.body || {};
     if (tipo !== 'unico') return err(res, `Tipo de publicación no disponible todavía: ${tipo}`, 400);
     if (generando) return err(res, 'Ya hay una publicación generándose, probá en un rato', 409);
     generando = true;
     try {
-      const borrador = await generarProductoUnico(sb, llamarClaude, { productoId: producto_id, tema });
+      const borrador = await generarProductoUnico(sb, llamarClaude, { productoId: producto_id, tema, plantillaId: plantilla_id });
       ok(res, { borrador });
     } catch (e) { err(res, e.message); }
     finally { generando = false; }
@@ -507,6 +657,43 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
     finally { generando = false; }
   });
 
+  app.post('/instagram/borradores/:id/deshacer', requiereClave, async (req, res) => {
+    try {
+      const b = await buscarBorrador(req.params.id);
+      if (!b) return err(res, 'Borrador no encontrado', 404);
+      if (b.estado === 'publicado') return err(res, 'Ya está publicado, no se puede modificar', 400);
+      ok(res, { borrador: await deshacerBorrador(sb, b) });
+    } catch (e) { err(res, e.message); }
+  });
+
+  // Plantillas guardadas: { nombre }
+  app.post('/instagram/borradores/:id/guardar-plantilla', requiereClave, async (req, res) => {
+    const nombre = String(req.body?.nombre || '').trim().slice(0, 60);
+    if (!nombre) return err(res, 'Ponele un nombre a la plantilla', 400);
+    if (generando) return err(res, 'Hay otra publicación procesándose, probá en un rato', 409);
+    generando = true;
+    try {
+      const b = await buscarBorrador(req.params.id);
+      if (!b) return err(res, 'Borrador no encontrado', 404);
+      ok(res, { plantilla: await guardarComoPlantilla(sb, llamarClaude, b, nombre) });
+    } catch (e) { err(res, e.message); }
+    finally { generando = false; }
+  });
+
+  app.get('/instagram/plantillas', async (req, res) => {
+    try {
+      const plantillas = await sb('GET', 'plantillas_instagram', { select: 'id,nombre,created_at', order: 'created_at.desc' });
+      ok(res, { plantillas: plantillas || [] });
+    } catch (e) { err(res, e.message); }
+  });
+
+  app.delete('/instagram/plantillas/:id', requiereClave, async (req, res) => {
+    try {
+      await sb('DELETE', `plantillas_instagram?id=eq.${encodeURIComponent(req.params.id)}`, { prefer: 'return=minimal' });
+      ok(res, {});
+    } catch (e) { err(res, e.message); }
+  });
+
   app.delete('/instagram/borradores/:id', requiereClave, async (req, res) => {
     try {
       const b = await buscarBorrador(req.params.id);
@@ -544,4 +731,5 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
 module.exports.candidatos = candidatos;
 module.exports.promptProductoUnico = promptProductoUnico;
 module.exports.parsearJson = parsearJson;
-module.exports.validarEstado = validarEstado;
+module.exports.extraerSlides = extraerSlides;
+module.exports.completarPlantilla = completarPlantilla;

@@ -108,9 +108,13 @@ El logo va en `assets/logo-crear-y-jugar.png`.
 **Rutas**
 
 - `GET /instagram/candidatos?n=10` — próximos productos según la rotación
-- `POST /instagram/generar` — `{ "producto_id"?: "...", "tema"?: "panel" }` genera un carrusel de un producto y lo guarda como borrador
+- `POST /instagram/generar` — `{ "producto_id"?: "...", "tema"?: "panel", "plantilla_id"?: "..." }` genera un carrusel de un producto y lo guarda como borrador
 - `GET /instagram/borradores?estado=borrador` — lista
 - `GET /instagram/borradores/:id`
 - `PATCH /instagram/borradores/:id` — `{ "caption"?: "...", "estado"?: "aprobado" | "borrador" }`
 - `DELETE /instagram/borradores/:id`
+- `POST /instagram/borradores/:id/editar` — `{ "mensaje": "..." }` chat libre con Claude sobre el diseño (ve las slides y edita su HTML)
+- `POST /instagram/borradores/:id/deshacer` — vuelve a la versión anterior
+- `POST /instagram/borradores/:id/guardar-plantilla` — `{ "nombre": "..." }` guarda el diseño como plantilla reutilizable
+- `GET /instagram/plantillas`, `DELETE /instagram/plantillas/:id`
 - `POST /instagram/borradores/:id/publicar` — publica un borrador aprobado (requiere las variables de Instagram)
