@@ -212,7 +212,8 @@ async function subirSlides(carpeta, pngs) {
 // Carrusel de un producto: por defecto portada, detalle, qué desarrolla y cierre
 const SLIDES_UNICO = { portada: 'unico_portada', detalle: 'unico_detalle', desarrolla: 'unico_desarrolla', cierre: 'cierre' };
 const SLIDES_UNICO_DEFAULT = ['portada', 'detalle', 'desarrolla', 'cierre'];
-const MODELO_DISENO = 'claude-opus-5';
+// Sonnet 5: buen equilibrio entre calidad de diseño y costo por mensaje (Opus 5 es más fino y ~2,5x más caro)
+const MODELO_DISENO = 'claude-sonnet-5';
 
 async function buscarProducto(sb, id) {
   const r = await sb('GET', 'proveedores', { select: 'id,nombre,descripcion,categoria,categoria_grande,proveedor,stock,imagenes', filter: `id=eq.${encodeURIComponent(id)}` });
@@ -408,7 +409,7 @@ Pedido: ${mensaje}`,
   }
   conversacion.push({ role: 'user', content: bloques });
 
-  const opciones = { model: MODELO_DISENO, maxTokens: 16000, system: SISTEMA_DISENO, effort: 'medium', fallback: true };
+  const opciones = { model: MODELO_DISENO, maxTokens: 16000, system: SISTEMA_DISENO, effort: 'medium' };
   let salida = await llamarClaude(conversacion, opciones);
   let respuesta = extraer(salida, 'respuesta') || salida.replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, '').trim() || 'Listo.';
   let nuevas = extraerSlides(salida);
@@ -503,7 +504,7 @@ Reemplazá el contenido propio de ESTE producto por marcadores, sin cambiar nada
 ${html.map((h, i) => `<slide id="${i + 1}">${h}</slide>`).join('\n')}
 
 Devolvé todas las slides con el mismo formato <slide id="N">...</slide> y nada más.`;
-  const salida = await llamarClaude(prompt, { model: MODELO_DISENO, maxTokens: 16000, effort: 'low', fallback: true });
+  const salida = await llamarClaude(prompt, { model: MODELO_DISENO, maxTokens: 16000, effort: 'low' });
   const slidesPlantilla = extraerSlides(salida);
   const lista = html.map((_, i) => slidesPlantilla[String(i + 1)]).filter(Boolean);
   if (lista.length !== html.length || !lista.join('').includes('{{')) throw new Error('No se pudo armar la plantilla; probá de nuevo');
