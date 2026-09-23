@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crear y Jugar — Instagram</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --purple:#8F83B9;
+  --purple-dark:#52486C;
+  --purple-light:#EFEDF8;
+  --purple-pale:#F7F6FC;
+  --peach:#F7D5C4;
+  --mint:#BCE3DE;
+  --mint-dark:#3D7E73;
+  --yellow:#FFF0B3;
+  --yellow-dark:#8C6D00;
+  --coral-dark:#A8543B;
+  --ink:#2A2536;
+  --ink-soft:#6B6478;
+  --line:#E4E0F0;
+  --surface:#FFFFFF;
+  --bg:#FBFAFD;
+  --radius-sm:8px;
+  --radius-md:12px;
+  --radius-lg:18px;
+  --shadow-card:0 1px 2px rgba(82,72,108,0.06), 0 4px 16px rgba(82,72,108,0.05);
+}
+body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;}
+.shell{max-width:920px;margin:0 auto;padding:1.75rem 1.25rem 4rem;}
+
+.header{background:linear-gradient(135deg, var(--purple-dark) 0%, #463D5C 100%);border-radius:var(--radius-lg);padding:1.25rem 1.5rem;display:flex;align-items:center;gap:14px;margin-bottom:1.25rem;}
+.header h1{font-family:'Fraunces',serif;font-size:23px;font-weight:600;color:#fff;letter-spacing:-0.01em;}
+.header p{font-size:13px;color:rgba(255,255,255,0.6);margin-top:3px;font-weight:500;}
+.header a{margin-left:auto;color:#fff;font-size:13px;font-weight:700;text-decoration:none;background:rgba(255,255,255,0.12);padding:8px 12px;border-radius:var(--radius-md);white-space:nowrap;}
+.header a:hover{background:rgba(255,255,255,0.2);}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:1.25rem 1.5rem;box-shadow:var(--shadow-card);}
+.card + .card{margin-top:1rem;}
+.section-label{font-size:11.5px;color:var(--purple-dark);text-transform:uppercase;letter-spacing:0.07em;font-weight:800;margin-bottom:10px;}
+.muted{font-size:13px;color:var(--ink-soft);line-height:1.5;}
+
+label.field{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:700;color:var(--ink-soft);flex:1;min-width:180px;}
+input,select,textarea{font-family:'Nunito',sans-serif;font-size:14.5px;padding:10px 12px;border-radius:var(--radius-md);border:1.5px solid var(--line);background:var(--purple-pale);color:var(--ink);width:100%;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--purple);background:#fff;}
+textarea{resize:vertical;min-height:150px;line-height:1.5;}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+
+.btn{font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;border:none;border-radius:var(--radius-md);padding:10px 16px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;}
+.btn:disabled{opacity:.55;cursor:default;}
+.btn-primary{background:var(--purple-dark);color:#fff;}
+.btn-primary:not(:disabled):hover{background:#463D5C;}
+.btn-soft{background:var(--purple-light);color:var(--purple-dark);}
+.btn-soft:not(:disabled):hover{background:#E4E0F4;}
+.btn-good{background:var(--mint-dark);color:#fff;}
+.btn-danger{background:none;color:var(--coral-dark);padding-left:8px;padding-right:8px;}
+.btn-danger:hover{text-decoration:underline;}
+
+details.config summary{cursor:pointer;font-size:13px;font-weight:800;color:var(--purple-dark);list-style:none;display:flex;align-items:center;gap:6px;}
+details.config summary::-webkit-details-marker{display:none;}
+details.config summary::before{content:'▸';transition:transform .15s;}
+details.config[open] summary::before{transform:rotate(90deg);}
+details.config .row{margin-top:12px;}
+.estado-conexion{font-size:12px;color:var(--ink-soft);margin-left:auto;font-weight:600;}
+
+.tabs{display:flex;gap:4px;background:var(--purple-light);border-radius:var(--radius-lg);padding:5px;margin:1.25rem 0 1rem;}
+.tab{flex:1;padding:10px 6px;font-size:13.5px;font-weight:700;cursor:pointer;border:none;background:none;color:var(--purple-dark);border-radius:var(--radius-md);font-family:'Nunito',sans-serif;}
+.tab.active{background:var(--purple-dark);color:#fff;box-shadow:0 2px 8px rgba(82,72,108,0.25);}
+.tab .count{font-size:12px;opacity:.7;margin-left:4px;}
+
+.borrador-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
+.borrador-head h3{font-family:'Fraunces',serif;font-size:20px;font-weight:600;color:var(--purple-dark);}
+.borrador-head .meta{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+.pill{font-size:11.5px;font-weight:800;padding:4px 10px;border-radius:999px;white-space:nowrap;}
+.pill.borrador{background:var(--yellow);color:var(--yellow-dark);}
+.pill.aprobado{background:var(--mint);color:var(--mint-dark);}
+.pill.publicado{background:var(--purple-light);color:var(--purple-dark);}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.chip{font-size:12px;font-weight:700;background:var(--purple-pale);border:1px solid var(--line);color:var(--purple-dark);padding:3px 9px;border-radius:999px;}
+.head-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+
+.slides{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px;margin:0 -4px 12px;padding-left:4px;}
+.slides a{flex:0 0 auto;scroll-snap-align:start;}
+.slides img{width:200px;height:250px;object-fit:cover;border-radius:var(--radius-md);border:1px solid var(--line);display:block;background:var(--purple-pale);}
+.acciones{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center;}
+.error-box{background:#FBEAE5;color:var(--coral-dark);font-size:13px;font-weight:600;padding:10px 12px;border-radius:var(--radius-md);margin-top:10px;}
+.vacio{text-align:center;padding:2.5rem 1rem;}
+
+.spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:14px;font-weight:700;padding:12px 18px;border-radius:var(--radius-md);opacity:0;transition:all .2s;pointer-events:none;max-width:calc(100% - 32px);text-align:center;z-index:10;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+@media (max-width:560px){
+  .shell{padding:1rem 1rem 3rem;}
+  .header{padding:1rem 1.1rem;}
+  .header h1{font-size:20px;}
+  .card{padding:1.1rem;}
+  .slides img{width:160px;height:200px;}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="header">
+    <div>
+      <h1>Instagram</h1>
+      <p>Borradores del agente: revisá, ajustá el texto y aprobá</p>
+    </div>
+    <a href="index.html">← Volver a la app</a>
+  </div>
+
+  <div class="card">
+    <details class="config" id="config">
+      <summary>Conexión <span class="estado-conexion" id="estado-conexion"></span></summary>
+      <div class="row">
+        <label class="field">URL del backend
+          <input type="text" id="cfg-url" placeholder="https://tu-backend.onrender.com">
+        </label>
+        <label class="field">Clave de admin (IG_ADMIN_KEY)
+          <input type="password" id="cfg-clave" placeholder="la que cargaste en Render">
+        </label>
+        <button class="btn btn-soft" onclick="guardarConfig()">Guardar</button>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <div class="section-label">Nueva publicación</div>
+    <div class="row">
+      <label class="field">Producto
+        <select id="gen-producto"><option value="">Automático (el que hace más que no aparece)</option></select>
+      </label>
+      <label class="field" style="flex:0 0 150px;min-width:150px;">Colores
+        <select id="gen-tema">
+          <option value="panel">Panel</option>
+          <option value="color">Color</option>
+          <option value="crema">Crema</option>
+        </select>
+      </label>
+      <button class="btn btn-primary" id="btn-generar" onclick="generar()">Generar</button>
+    </div>
+    <p class="muted" style="margin-top:8px;">Tarda unos 30 segundos: escribe los textos, arma las 4 imágenes y las guarda como borrador.</p>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-estado="borrador" onclick="cambiarTab(this)">Borradores<span class="count"></span></button>
+    <button class="tab" data-estado="aprobado" onclick="cambiarTab(this)">Aprobados<span class="count"></span></button>
+    <button class="tab" data-estado="publicado" onclick="cambiarTab(this)">Publicados<span class="count"></span></button>
+  </div>
+
+  <div id="lista"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// Comparte la URL del backend con la app (misma clave de localStorage)
+const BACKEND_KEY = 'cyj_backend_url_v1';
+const CLAVE_KEY = 'cyj_ig_admin_key_v1';
+
+function leer(k){ try { return localStorage.getItem(k) || ''; } catch { return ''; } }
+function escribir(k, v){ try { localStorage.setItem(k, v); } catch {} }
+
+let borradores = [];
+let estadoActual = 'borrador';
+
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+async function api(metodo, ruta, body){
+  const base = leer(BACKEND_KEY).replace(/\/$/, '');
+  if(!base) throw new Error('Configurá la URL del backend en "Conexión"');
+  const headers = { 'Content-Type': 'application/json' };
+  const clave = leer(CLAVE_KEY);
+  if(clave) headers['x-admin-key'] = clave;
+  const res = await fetch(base + ruta, { method: metodo, headers, body: body ? JSON.stringify(body) : undefined });
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok || data.ok === false) throw new Error(data.error || ('Error ' + res.status));
+  return data;
+}
+
+function guardarConfig(){
+  escribir(BACKEND_KEY, document.getElementById('cfg-url').value.trim().replace(/\/$/, ''));
+  escribir(CLAVE_KEY, document.getElementById('cfg-clave').value.trim());
+  toast('Conexión guardada');
+  iniciar();
+}
+
+async function cargarCandidatos(){
+  const sel = document.getElementById('gen-producto');
+  try{
+    const { candidatos } = await api('GET', '/instagram/candidatos?n=30');
+    sel.innerHTML = '<option value="">Automático (el que hace más que no aparece)</option>' +
+      candidatos.map(c => `<option value="${esc(c.id)}">${esc(c.nombre)}${c.ultima_publicacion ? '' : ' · nunca publicado'}</option>`).join('');
+  }catch(e){ /* el estado de conexión ya lo muestra cargarBorradores */ }
+}
+
+async function cargarBorradores(){
+  const estado = document.getElementById('estado-conexion');
+  try{
+    const data = await api('GET', '/instagram/borradores');
+    borradores = data.borradores || [];
+    estado.textContent = 'Conectado';
+    estado.style.color = 'var(--mint-dark)';
+  }catch(e){
+    borradores = [];
+    estado.textContent = e.message;
+    estado.style.color = 'var(--coral-dark)';
+    document.getElementById('config').open = true;
+  }
+  render();
+}
+
+function cambiarTab(el){
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === el));
+  estadoActual = el.dataset.estado;
+  render();
+}
+
+function fecha(iso){
+  if(!iso) return '';
+  return new Date(iso).toLocaleString('es-AR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+
+function render(){
+  document.querySelectorAll('.tab').forEach(t => {
+    const n = borradores.filter(b => b.estado === t.dataset.estado).length;
+    t.querySelector('.count').textContent = n ? `(${n})` : '';
+  });
+  const lista = borradores.filter(b => b.estado === estadoActual);
+  const cont = document.getElementById('lista');
+  if(!lista.length){
+    const textos = { borrador: 'No hay borradores. Generá uno nuevo arriba.', aprobado: 'No hay publicaciones aprobadas esperando.', publicado: 'Todavía no se publicó nada desde acá.' };
+    cont.innerHTML = `<div class="card vacio"><p class="muted">${textos[estadoActual]}</p></div>`;
+    return;
+  }
+  cont.innerHTML = lista.map(tarjeta).join('');
+}
+
+function tarjeta(b){
+  const c = b.contenido || {};
+  const slides = (b.slides || []).map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="Slide ${i + 1}" loading="lazy"></a>`).join('');
+  const habs = (c.habilidades || []).map(h => `<span class="chip">${esc(h.nombre)}</span>`).join('');
+  const editable = b.estado !== 'publicado';
+  let acciones = '';
+  if(b.estado === 'borrador'){
+    acciones = `
+      <button class="btn btn-soft" onclick="guardarCaption('${b.id}')">Guardar texto</button>
+      <button class="btn btn-good" onclick="cambiarEstado('${b.id}','aprobado')">Aprobar</button>
+      <button class="btn btn-danger" onclick="descartar('${b.id}')">Descartar</button>`;
+  } else if(b.estado === 'aprobado'){
+    acciones = `
+      <button class="btn btn-soft" onclick="guardarCaption('${b.id}')">Guardar texto</button>
+      <button class="btn btn-soft" onclick="cambiarEstado('${b.id}','borrador')">Volver a borrador</button>
+      <button class="btn btn-primary" onclick="publicar('${b.id}', this)">Publicar en Instagram</button>`;
+  }
+  const meta = b.estado === 'publicado' ? `Publicado ${fecha(b.publicado_at)}` : `Generado ${fecha(b.created_at)}`;
+  return `
+    <div class="card" id="b-${b.id}">
+      <div class="borrador-head">
+        <div>
+          <h3>${esc(c.nombre || 'Publicación')}</h3>
+          <div class="meta">${esc(meta)}${c.edad ? ' · ' + esc(c.edad) : ''}${b.tema ? ' · tema ' + esc(b.tema) : ''}</div>
+          ${habs ? `<div class="chips">${habs}</div>` : ''}
+        </div>
+        <div class="head-right"><span class="pill ${esc(b.estado)}">${esc(b.estado)}</span></div>
+      </div>
+      <div class="slides">${slides}</div>
+      <div class="section-label">Texto del posteo</div>
+      <textarea id="cap-${b.id}" ${editable ? '' : 'readonly'}>${esc(b.caption)}</textarea>
+      ${b.error ? `<div class="error-box">Último error al publicar: ${esc(b.error)}</div>` : ''}
+      ${acciones ? `<div class="acciones">${acciones}</div>` : ''}
+    </div>`;
+}
+
+async function generar(){
+  const btn = document.getElementById('btn-generar');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Generando…';
+  try{
+    const body = { tema: document.getElementById('gen-tema').value };
+    const prod = document.getElementById('gen-producto').value;
+    if(prod) body.producto_id = prod;
+    await api('POST', '/instagram/generar', body);
+    toast('Borrador listo');
+    cambiarTab(document.querySelector('.tab[data-estado="borrador"]'));
+    await Promise.all([cargarBorradores(), cargarCandidatos()]);
+  }catch(e){ toast(e.message); }
+  finally{ btn.disabled = false; btn.textContent = 'Generar'; }
+}
+
+async function guardarCaption(id){
+  try{
+    await api('PATCH', `/instagram/borradores/${id}`, { caption: document.getElementById('cap-' + id).value });
+    toast('Texto guardado');
+    await cargarBorradores();
+  }catch(e){ toast(e.message); }
+}
+
+async function cambiarEstado(id, estado){
+  try{
+    // Guarda el texto junto con el cambio de estado, por si se editó sin guardar
+    await api('PATCH', `/instagram/borradores/${id}`, { estado, caption: document.getElementById('cap-' + id).value });
+    toast(estado === 'aprobado' ? 'Aprobado' : 'Volvió a borradores');
+    await cargarBorradores();
+  }catch(e){ toast(e.message); }
+}
+
+async function descartar(id){
+  if(!confirm('¿Descartar este borrador? Se borra y el producto vuelve a quedar disponible.')) return;
+  try{
+    await api('DELETE', `/instagram/borradores/${id}`);
+    toast('Borrador descartado');
+    await Promise.all([cargarBorradores(), cargarCandidatos()]);
+  }catch(e){ toast(e.message); }
+}
+
+async function publicar(id, btn){
+  if(!confirm('¿Publicar ahora en Instagram?')) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Publicando…';
+  try{
+    await api('POST', `/instagram/borradores/${id}/publicar`);
+    toast('¡Publicado en Instagram!');
+  }catch(e){ toast(e.message); }
+  await cargarBorradores();
+}
+
+function iniciar(){
+  document.getElementById('cfg-url').value = leer(BACKEND_KEY);
+  document.getElementById('cfg-clave').value = leer(CLAVE_KEY);
+  if(!leer(CLAVE_KEY)) document.getElementById('config').open = true;
+  cargarBorradores();
+  cargarCandidatos();
+}
+iniciar();
+</script>
+</body>
+</html>

@@ -103,6 +103,8 @@ Genera publicaciones (borradores) a partir de los productos de `proveedores`. C�
 
 El logo va en `assets/logo-crear-y-jugar.png`.
 
+**Pantalla de revisión:** `instagram.html`. Se sube a Netlify en la misma carpeta que la app y queda en `/instagram.html`. Toma la URL del backend que ya está configurada en la app; la clave de admin se carga una vez en "Conexión".
+
 **Rutas**
 
 - `GET /instagram/candidatos?n=10` — próximos productos según la rotación
