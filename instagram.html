@@ -599,10 +599,26 @@ function renderCalendario(){
       <div class="acciones">
         <button class="btn btn-primary" onclick="generarSemana(this)">Generar los que faltan de esta semana</button>
         <button class="btn btn-soft" onclick="editarAgenda()">Cambiar días y horarios</button>
+        <button class="btn btn-soft" onclick="probarConexion(this)">Probar conexión con Instagram</button>
       </div>
+      <div id="estado-ig" class="muted" style="margin-top:8px;"></div>
       <div id="editor-agenda"></div>
     </div>
     ${dias || '<div class="card vacio"><p class="muted">No hay nada en los próximos días.</p></div>'}`;
+}
+
+async function probarConexion(btn){
+  btn.disabled = true;
+  const el = document.getElementById('estado-ig');
+  el.textContent = 'Probando…';
+  try{
+    const r = await api('GET', '/instagram/conexion');
+    el.innerHTML = r.conectado
+      ? `✅ Conectado como <b>@${esc(r.usuario)}</b>. Los aprobados se publican solos a su hora.${r.vence ? ` (La conexión se renueva sola; vence el ${esc(new Date(r.vence).toLocaleDateString('es-AR', ZONA))} si no se renueva.)` : ''}`
+      : `❌ No conectado: ${esc(r.motivo)}`;
+    await cargarAgenda(); render();
+  }catch(e){ el.textContent = e.message; }
+  btn.disabled = false;
 }
 
 function verBorrador(id, estado){

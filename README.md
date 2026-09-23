@@ -98,7 +98,7 @@ Genera publicaciones (borradores) a partir de los productos de `proveedores`. C�
 | `SUPABASE_KEY` | Tiene que poder escribir en Storage (service role) |
 | `IG_TEMA` | `panel` (default), `color` o `crema` |
 | `IG_RECORTE` | `ninguno` (default) o `removebg` + `REMOVEBG_API_KEY` |
-| `IG_USER_ID`, `IG_ACCESS_TOKEN` | Cuenta profesional de Instagram (para publicar) |
+| `IG_ACCESS_TOKEN` | Token de la cuenta profesional de Instagram (API con inicio de sesión de Instagram, empieza con `IG`). Se renueva solo cada semana y el ID de la cuenta se averigua solo. Con un token de Facebook (`EAA…`) hace falta además `IG_USER_ID` |
 | `IG_ADMIN_KEY` | Clave que piden generar, editar, borrar y publicar (header `x-admin-key`) |
 
 El logo va en `assets/logo-crear-y-jugar.png`.
@@ -120,6 +120,7 @@ El logo va en `assets/logo-crear-y-jugar.png`.
 - `POST /instagram/borradores/:id/guardar-plantilla` — `{ "nombre": "..." }` guarda el diseño como plantilla reutilizable
 - `GET /instagram/plantillas`, `DELETE /instagram/plantillas/:id`
 - `POST /instagram/borradores/:id/marcar-publicado` — para cuando se sube a mano desde el celular
+- `GET /instagram/conexion` — prueba la conexión con Instagram y devuelve el usuario conectado
 - `GET /instagram/agenda`, `PUT /instagram/agenda` — días/horarios de publicación y generación automática (se guarda en `config`, clave `instagram_agenda`)
 - `POST /instagram/agenda/generar-semana` — arma los borradores que faltan para los próximos 7 días
 - `POST /instagram/borradores/:id/publicar` — publica un borrador aprobado (requiere las variables de Instagram)
