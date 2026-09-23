@@ -383,11 +383,12 @@ function contador(indice, total, color = COLORES.violeta) {
 // Un producto contado en varias slides, con poca información por slide:
 //   portada -> foto de detalle -> "¿qué desarrolla?" -> (cierre compartido)
 //
-// datos comunes: { nombre, gancho, bajada, edad, fotos: [..], recortada, habilidades: [{ nombre, detalle }], indice, total }
+// datos comunes: { nombre, gancho, bajada, edad, fotos: [..], fotoRecortada?, habilidades: [{ nombre, detalle }], tema, indice, total }
+// fotoRecortada (PNG sin fondo) se usa solo en la portada; el resto de las slides usa las fotos originales.
 
 async function unicoPortada(d) {
   const t = temaDe(d, 'portada');
-  const foto = await cargarImagen(d.fotos?.[0]);
+  const foto = await cargarImagen(d.fotoRecortada || d.fotos?.[0]);
   return h('div', {
     width: W, height: H, backgroundColor: t.fondo, flexDirection: 'column', alignItems: 'center',
     padding: '56px 72px 52px', color: t.texto, fontFamily: 'Lexend', position: 'relative',
@@ -404,7 +405,7 @@ async function unicoPortada(d) {
     }, d.gancho) : null,
     d.edad ? h('div', { marginTop: 22 }, pastilla(d.edad, { fondo: t.edad[0], color: t.edad[1], tam: 26, peso: 600, padY: 10 })) : null,
     h('div', { flexGrow: 1, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
-      fotoProducto(foto, { ancho: 820, alto: 640, recortada: d.recortada }),
+      fotoProducto(foto, { ancho: 820, alto: 640, recortada: Boolean(d.fotoRecortada) }),
     ),
     h('div', { width: '100%', justifyContent: 'flex-end', alignItems: 'center', fontSize: 26, fontWeight: 500, marginTop: 12 },
       h('div', { marginRight: 10 }, 'Deslizá'),
@@ -426,7 +427,7 @@ async function unicoDetalle(d) {
       d.edad ? pastilla(d.edad, { fondo: t.edad[0], color: t.edad[1], tam: 24, peso: 600, padY: 8 }) : null,
     ),
     h('div', { flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
-      fotoProducto(foto, { ancho: 760, alto: 860, recortada: d.recortada, rot: 2 }),
+      fotoProducto(foto, { ancho: 760, alto: 860, recortada: false, rot: 2 }),
     ),
     d.bajada ? h('div', {
       backgroundColor: COLORES.blanco, borderRadius: 32, padding: '28px 40px', marginTop: 8,

@@ -6,6 +6,7 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const registrarReconciliacionTiendanube = require('./tiendanube-reconciliacion');
 const registrarAuthTiendanube = require('./auth-tiendanube');
+const registrarInstagramAgente = require('./instagram-agente');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 } }); // 40MB, algunas listas traen imágenes incrustadas
 
@@ -417,6 +418,30 @@ app.patch('/productos-pendientes/:id', async (req, res) => {
 // ─── CARGA INTELIGENTE DE LISTA DE PROVEEDOR (con IA) ────────────────────────
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
+// Llamada a la API de Anthropic, compartida con los módulos (ej. instagram-agente.js).
+// Devuelve el texto de la respuesta; tira error si la API falla.
+async function llamarClaude(prompt, { maxTokens = 500, model = 'claude-sonnet-4-6' } = {}) {
+  const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!aiRes.ok) {
+    const t = await aiRes.text();
+    throw new Error(`Error llamando a la IA: ${aiRes.status} ${t}`);
+  }
+  const aiData = await aiRes.json();
+  return aiData.content?.[0]?.text || '';
+}
+
 app.post('/proveedores/upload-excel', (req, res, next) => {
   upload.single('file')(req, res, (uploadErr) => {
     if (uploadErr) {
@@ -493,26 +518,9 @@ IMPORTANTE: Si hay solo UNA columna de precios, es el precio público (los prove
 Respondé ÚNICAMENTE con un JSON válido, sin texto adicional ni explicaciones:
 {"fila_inicio": 0, "col_nombre": 0, "col_codigo": null, "col_costo": 0, "col_publico": null, "confianza": "alto"}`;
 
-    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 500,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-
-    if (!aiRes.ok) {
-      const t = await aiRes.text();
-      return err(res, `Error llamando a la IA: ${aiRes.status} ${t}`);
-    }
-    const aiData = await aiRes.json();
-    const aiText = aiData.content?.[0]?.text || '';
+    let aiText;
+    try { aiText = await llamarClaude(prompt, { maxTokens: 500 }); }
+    catch (e) { return err(res, e.message); }
     let mapping;
     try {
       let jsonStr = aiText.trim();
@@ -721,6 +729,7 @@ app.post('/admin/reload-catalog', async (_, res) => {
 });
 
 registrarReconciliacionTiendanube(app, sb);
+registrarInstagramAgente(app, sb, llamarClaude);
 registrarAuthTiendanube(app);
 
 const PORT = process.env.PORT || 3001;
