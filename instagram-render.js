@@ -240,52 +240,121 @@ function icono(tipo, tam, color) {
   };
 }
 
-// Variantes de decoración: cambian qué esquinas llevan manchas, para que las slides no se repitan
+// --- Temas de color ---
+//
+// Cada tema define, por slide, el fondo, las manchas de las esquinas, los colores de las chispitas y
+// de los textos, y opcionalmente un panel de color liso detrás del contenido.
+//   crema: base cálida con manchas pastel suaves
+//   color: cada slide con un fondo pleno de la paleta (lavanda / menta / durazno)
+//   panel: base crema con un bloque de color grande que ordena la slide
+
+const TEMAS = {
+  crema: {
+    portada: {
+      fondo: CREMA, texto: COLORES.violeta, acento: COLORES.lavanda, edad: [COLORES.lavanda, COLORES.blanco],
+      manchas: ['#E4DEF3', '#D6EEEA', '#FBE3D7'], iconos: [COLORES.lavanda, '#F2B8A0', '#F5D76E', '#8CCFC6'],
+    },
+    detalle: {
+      fondo: CREMA, texto: COLORES.violeta, acento: COLORES.lavanda, edad: [COLORES.lavanda, COLORES.blanco],
+      manchas: ['#FBE3D7', '#E4DEF3'], iconos: ['#F5D76E', COLORES.lavanda, '#F2B8A0'],
+    },
+    desarrolla: {
+      fondo: CREMA, texto: COLORES.violeta, acento: COLORES.lavanda,
+      manchas: ['#D6EEEA', '#FFF0B3'], iconos: [COLORES.lavanda, '#F2B8A0', '#8CCFC6'],
+    },
+  },
+  color: {
+    portada: {
+      fondo: COLORES.lavanda, texto: COLORES.blanco, acento: COLORES.manteca, edad: [COLORES.manteca, COLORES.violeta],
+      manchas: ['#9D92C5', '#8174AE', '#9D92C5'], iconos: [COLORES.manteca, COLORES.blanco, COLORES.menta, COLORES.durazno],
+      logoAro: true,
+    },
+    detalle: {
+      fondo: COLORES.menta, texto: COLORES.violeta, acento: COLORES.violeta, edad: [COLORES.violeta, COLORES.blanco],
+      manchas: ['#CFECE8', '#A6D6CF'], iconos: [COLORES.blanco, COLORES.lavanda, COLORES.manteca],
+    },
+    desarrolla: {
+      fondo: COLORES.durazno, texto: COLORES.violeta, acento: '#7A6BA8',
+      manchas: ['#FBE4D9', '#EFC1AB'], iconos: [COLORES.blanco, COLORES.lavanda, COLORES.manteca],
+    },
+  },
+  panel: {
+    portada: {
+      fondo: CREMA, texto: COLORES.violeta, acento: COLORES.lavanda, edad: [COLORES.lavanda, COLORES.blanco],
+      manchas: [null, null, '#FBE3D7'], iconos: [COLORES.lavanda, '#F2B8A0', COLORES.blanco, COLORES.blanco],
+      panel: { color: COLORES.menta, top: 640, left: 0, right: 0, bottom: 0, radius: '120px 120px 0 0' },
+    },
+    detalle: {
+      fondo: CREMA, texto: COLORES.violeta, acento: COLORES.lavanda, edad: [COLORES.lavanda, COLORES.blanco],
+      manchas: [null, null], iconos: ['#F5D76E', COLORES.lavanda, '#F2B8A0'],
+      panel: { color: COLORES.manteca, top: 330, left: 0, right: 0, bottom: 440, radius: 0 },
+    },
+    desarrolla: {
+      fondo: CREMA, texto: COLORES.violeta, acento: COLORES.lavanda, cabecera: true,
+      manchas: [null, null], iconos: [COLORES.manteca, '#F2B8A0', '#8CCFC6'],
+      panel: { color: COLORES.lavanda, top: 0, left: 0, right: 0, bottom: 880, radius: '0 0 80px 80px' },
+    },
+  },
+};
+
+function temaDe(d, slide) {
+  return (TEMAS[d.tema] || TEMAS.crema)[slide];
+}
+
+// Posiciones de manchas y chispitas por slide (los colores los pone el tema; null = sin mancha)
 const DECORACIONES = {
-  a: () => [
-    mancha(40, 120, 230, [1, 0.8, 1.1, 0.9, 1.2, 0.85, 1, 0.9], '#E4DEF3'),
-    mancha(1060, 1260, 260, [1, 1.15, 0.85, 1, 0.9, 1.1, 0.95, 1], '#D6EEEA'),
-    mancha(1080, 120, 120, [1, 0.9, 1.2, 1, 0.8, 1.1], '#FBE3D7'),
-    iconoSvg('chispa', 150, 380, 30, COLORES.lavanda, 0),
-    iconoSvg('corazon', 930, 300, 30, '#F2B8A0', -12),
-    iconoSvg('estrella', 70, 980, 34, '#F5D76E', 10),
-    iconoSvg('chispa', 990, 860, 24, '#8CCFC6', 0),
+  portada: (m, c) => [
+    m[0] && mancha(40, 120, 230, [1, 0.8, 1.1, 0.9, 1.2, 0.85, 1, 0.9], m[0]),
+    m[1] && mancha(1060, 1260, 260, [1, 1.15, 0.85, 1, 0.9, 1.1, 0.95, 1], m[1]),
+    m[2] && mancha(1080, 120, 120, [1, 0.9, 1.2, 1, 0.8, 1.1], m[2]),
+    iconoSvg('chispa', 150, 380, 30, c[0], 0),
+    iconoSvg('corazon', 960, 500, 30, c[1], -12),
+    iconoSvg('estrella', 70, 980, 34, c[2], 10),
+    iconoSvg('chispa', 990, 860, 24, c[3], 0),
   ],
-  b: () => [
-    mancha(1040, 80, 240, [1, 0.85, 1.1, 0.95, 1.2, 0.9, 1, 0.8], '#FBE3D7'),
-    mancha(0, 1300, 280, [1.1, 0.9, 1, 1.15, 0.85, 1, 0.9, 1.05], '#E4DEF3'),
-    iconoSvg('estrella', 90, 180, 30, '#F5D76E', -8),
-    iconoSvg('chispa', 960, 520, 28, COLORES.lavanda, 0),
-    iconoSvg('corazon', 110, 760, 26, '#F2B8A0', 10),
+  detalle: (m, c) => [
+    m[0] && mancha(1040, 80, 240, [1, 0.85, 1.1, 0.95, 1.2, 0.9, 1, 0.8], m[0]),
+    m[1] && mancha(0, 1300, 280, [1.1, 0.9, 1, 1.15, 0.85, 1, 0.9, 1.05], m[1]),
+    iconoSvg('estrella', 90, 180, 30, c[0], -8),
+    iconoSvg('chispa', 960, 520, 28, c[1], 0),
+    iconoSvg('corazon', 110, 760, 26, c[2], 10),
   ],
-  c: () => [
-    mancha(0, 60, 250, [1, 1.1, 0.9, 1, 1.2, 0.85, 1.05, 0.9], '#D6EEEA'),
-    mancha(1080, 1180, 300, [1, 0.9, 1.1, 0.85, 1, 1.15, 0.9, 1], '#FFF0B3'),
-    iconoSvg('chispa', 960, 170, 30, COLORES.lavanda, 0),
-    iconoSvg('corazon', 80, 1180, 28, '#F2B8A0', -10),
-    iconoSvg('estrella', 990, 420, 26, '#8CCFC6', 12),
+  desarrolla: (m, c) => [
+    m[0] && mancha(0, 60, 250, [1, 1.1, 0.9, 1, 1.2, 0.85, 1.05, 0.9], m[0]),
+    m[1] && mancha(1080, 1180, 300, [1, 0.9, 1.1, 0.85, 1, 1.15, 0.9, 1], m[1]),
+    iconoSvg('chispa', 960, 170, 30, c[0], 0),
+    iconoSvg('corazon', 80, 1180, 28, c[1], -10),
+    iconoSvg('estrella', 990, 420, 26, c[2], 12),
   ],
 };
 
-function fondoDecorado(variante = 'a') {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${DECORACIONES[variante]().join('')}</svg>`;
-  return img(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`, { position: 'absolute', top: 0, left: 0, width: W, height: H });
+// Capas de fondo: panel liso (si el tema lo pide) + manchas y chispitas
+function fondoDecorado(slide, t) {
+  const capas = [];
+  if (t.panel) {
+    const { color, radius, ...pos } = t.panel;
+    capas.push(h('div', { position: 'absolute', backgroundColor: color, borderRadius: radius, ...pos }));
+  }
+  const piezas = DECORACIONES[slide](t.manchas, t.iconos).filter(Boolean).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${piezas}</svg>`;
+  capas.push(img(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`, { position: 'absolute', top: 0, left: 0, width: W, height: H }));
+  return capas;
 }
 
 // Foto del producto: si está recortada flota con sombra; si es foto con fondo, va en marco tipo polaroid
 function fotoProducto(src, { ancho, alto, recortada, rot = -2 }) {
-  if (!src) {
-    return h('div', {
-      width: ancho, height: alto, borderRadius: 40, border: `5px dashed ${COLORES.lavanda}`,
-      alignItems: 'center', justifyContent: 'center', color: COLORES.lavanda, fontSize: 28,
-    }, 'FOTO DEL PRODUCTO');
-  }
-  if (recortada) return img(src, { width: ancho, height: alto, objectFit: 'contain' });
+  if (recortada && src) return img(src, { width: ancho, height: alto, objectFit: 'contain' });
   return h('div', {
     padding: 14, backgroundColor: COLORES.blanco, borderRadius: 36, transform: `rotate(${rot}deg)`,
     boxShadow: '0 18px 40px rgba(82,72,108,0.18)',
   },
-    img(src, { width: ancho - 28, height: alto - 28, objectFit: 'cover', borderRadius: 26 }),
+    src
+      ? img(src, { width: ancho - 28, height: alto - 28, objectFit: 'cover', borderRadius: 26 })
+      // Sin foto (preview): mismo marco con un hueco neutro, para evaluar la composición igual
+      : h('div', {
+        width: ancho - 28, height: alto - 28, borderRadius: 26, backgroundColor: '#ECE8E3',
+        alignItems: 'center', justifyContent: 'center', color: '#A39DB0', fontSize: 28, letterSpacing: 3,
+      }, 'FOTO DEL PRODUCTO'),
   );
 }
 
@@ -301,42 +370,44 @@ function contador(indice, total, color = COLORES.violeta) {
 // datos comunes: { nombre, gancho, bajada, edad, fotos: [..], recortada, habilidades: [{ nombre, detalle }], indice, total }
 
 async function unicoPortada(d) {
+  const t = temaDe(d, 'portada');
   const foto = await cargarImagen(d.fotos?.[0]);
   return h('div', {
-    width: W, height: H, backgroundColor: CREMA, flexDirection: 'column', alignItems: 'center',
-    padding: '56px 72px 52px', color: COLORES.violeta, fontFamily: 'Lexend', position: 'relative',
+    width: W, height: H, backgroundColor: t.fondo, flexDirection: 'column', alignItems: 'center',
+    padding: '56px 72px 52px', color: t.texto, fontFamily: 'Lexend', position: 'relative',
   },
-    fondoDecorado('a'),
-    logo(150),
+    fondoDecorado('portada', t),
+    t.logoAro ? h('div', { padding: 6, borderRadius: 200, backgroundColor: COLORES.blanco }, logo(144)) : logo(150),
     h('div', {
       marginTop: 18, fontFamily: 'Playfair Display', fontWeight: 800, fontSize: d.nombre.length > 14 ? 96 : 120,
       lineHeight: 1, letterSpacing: 2, textTransform: 'uppercase', textAlign: 'center', justifyContent: 'center',
     }, d.nombre),
     d.gancho ? h('div', {
       marginTop: 18, fontFamily: 'Playfair Display', fontStyle: 'italic', fontWeight: 400, fontSize: 46,
-      color: COLORES.lavanda, textAlign: 'center', justifyContent: 'center',
+      color: t.acento, textAlign: 'center', justifyContent: 'center',
     }, d.gancho) : null,
-    d.edad ? h('div', { marginTop: 22 }, pastilla(d.edad, { fondo: COLORES.lavanda, color: COLORES.blanco, tam: 26, peso: 600, padY: 10 })) : null,
+    d.edad ? h('div', { marginTop: 22 }, pastilla(d.edad, { fondo: t.edad[0], color: t.edad[1], tam: 26, peso: 600, padY: 10 })) : null,
     h('div', { flexGrow: 1, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
       fotoProducto(foto, { ancho: 820, alto: 640, recortada: d.recortada }),
     ),
     h('div', { width: '100%', justifyContent: 'flex-end', alignItems: 'center', fontSize: 26, fontWeight: 500, marginTop: 12 },
       h('div', { marginRight: 10 }, 'Deslizá'),
-      icono('flecha', 30, COLORES.violeta),
+      icono('flecha', 30, t.texto),
     ),
   );
 }
 
 async function unicoDetalle(d) {
+  const t = temaDe(d, 'detalle');
   const foto = await cargarImagen(d.fotos?.[1] || d.fotos?.[0]);
   return h('div', {
-    width: W, height: H, backgroundColor: CREMA, flexDirection: 'column', alignItems: 'center',
-    padding: '56px 72px 52px', color: COLORES.violeta, fontFamily: 'Lexend', position: 'relative',
+    width: W, height: H, backgroundColor: t.fondo, flexDirection: 'column', alignItems: 'center',
+    padding: '56px 72px 52px', color: t.texto, fontFamily: 'Lexend', position: 'relative',
   },
-    fondoDecorado('b'),
+    fondoDecorado('detalle', t),
     h('div', { width: '100%', justifyContent: 'space-between', alignItems: 'center' },
-      contador(d.indice, d.total),
-      d.edad ? pastilla(d.edad, { fondo: COLORES.lavanda, color: COLORES.blanco, tam: 24, peso: 600, padY: 8 }) : null,
+      contador(d.indice, d.total, t.texto),
+      d.edad ? pastilla(d.edad, { fondo: t.edad[0], color: t.edad[1], tam: 24, peso: 600, padY: 8 }) : null,
     ),
     h('div', { flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
       fotoProducto(foto, { ancho: 760, alto: 860, recortada: d.recortada, rot: 2 }),
@@ -357,21 +428,25 @@ const ESTILO_HABILIDAD = [
 
 async function unicoDesarrolla(d) {
   const foto = await cargarImagen(d.fotos?.[0]);
+  const t = temaDe(d, 'desarrolla');
   const habs = (d.habilidades || []).slice(0, 3);
+  // Con cabecera de color, los títulos van en blanco/manteca sobre el panel
+  const tituloColor = t.cabecera ? COLORES.blanco : t.texto;
+  const acento = t.cabecera ? COLORES.manteca : t.acento;
   return h('div', {
-    width: W, height: H, backgroundColor: CREMA, flexDirection: 'column',
-    padding: '56px 72px 52px', color: COLORES.violeta, fontFamily: 'Lexend', position: 'relative',
+    width: W, height: H, backgroundColor: t.fondo, flexDirection: 'column',
+    padding: '56px 72px 52px', color: t.texto, fontFamily: 'Lexend', position: 'relative',
   },
-    fondoDecorado('c'),
+    fondoDecorado('desarrolla', t),
     h('div', { justifyContent: 'space-between', alignItems: 'center' },
-      contador(d.indice, d.total),
+      contador(d.indice, d.total, tituloColor),
       foto ? h('div', { width: 150, height: 150, borderRadius: 150, overflow: 'hidden', border: `8px solid ${COLORES.blanco}`, boxShadow: '0 8px 24px rgba(82,72,108,0.15)' },
         img(foto, { width: 134, height: 134, objectFit: 'cover' })) : null,
     ),
     h('div', { flexDirection: 'column', marginTop: 40 },
-      h('div', { fontSize: 26, fontWeight: 600, letterSpacing: 4, color: COLORES.lavanda }, 'JUGANDO CON'),
-      h('div', { fontFamily: 'Playfair Display', fontWeight: 800, fontSize: 72, lineHeight: 1.05, textTransform: 'uppercase', marginTop: 6 }, d.nombre),
-      h('div', { fontFamily: 'Playfair Display', fontStyle: 'italic', fontWeight: 400, fontSize: 60, color: COLORES.lavanda, marginTop: 4 }, '¿qué desarrolla?'),
+      h('div', { fontSize: 26, fontWeight: 600, letterSpacing: 4, color: acento }, 'JUGANDO CON'),
+      h('div', { fontFamily: 'Playfair Display', fontWeight: 800, fontSize: d.nombre.length > 18 ? 60 : 72, lineHeight: 1.05, textTransform: 'uppercase', marginTop: 6, color: tituloColor }, d.nombre),
+      h('div', { fontFamily: 'Playfair Display', fontStyle: 'italic', fontWeight: 400, fontSize: 60, color: acento, marginTop: 4 }, '¿qué desarrolla?'),
     ),
     h('div', { flexDirection: 'column', marginTop: 48, flexGrow: 1 },
       habs.map((hab, i) => {
