@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const satori = require('satori').default;
 const { Resvg } = require('@resvg/resvg-js');
+const sharp = require('sharp');
 
 const W = 1080;
 const H = 1350;
@@ -26,8 +27,11 @@ const COLORES = {
 // Fondos que alternan en las slides de producto del carrusel
 const FONDOS_PRODUCTO = [COLORES.durazno, COLORES.menta, COLORES.manteca, COLORES.blanco];
 
+// Base cálida para el carrusel de producto único (entre blanco y manteca)
+const CREMA = '#FFF8EE';
+
 const URL_TIENDA = 'crearyjugar.mitiendanube.com';
-const LOGO_PATH = path.join(__dirname, 'assets', 'logo-crear-y-jugar.png');
+const LOGO_PATH = process.env.IG_LOGO_PATH || path.join(__dirname, 'assets', 'logo-crear-y-jugar.png');
 
 // --- Tipografías (empaquetadas vía @fontsource, sin depender de red en runtime) ---
 
@@ -75,21 +79,24 @@ function mimeDeBuffer(buf) {
   return 'image/png';
 }
 
+// Satori solo lee PNG/JPEG: lo demás (webp de Tiendanube, por ejemplo) se pasa a PNG con sharp
+async function normalizar(buf) {
+  const mime = mimeDeBuffer(buf);
+  if (mime === 'image/png' || mime === 'image/jpeg') return aDataUri(buf, mime);
+  return aDataUri(await sharp(buf).png().toBuffer(), 'image/png');
+}
+
 // Acepta URL http(s), data URI, ruta local o Buffer; devuelve data URI (o null)
 async function cargarImagen(fuenteImg) {
   if (!fuenteImg) return null;
-  if (Buffer.isBuffer(fuenteImg)) return aDataUri(fuenteImg, mimeDeBuffer(fuenteImg));
+  if (Buffer.isBuffer(fuenteImg)) return normalizar(fuenteImg);
   if (fuenteImg.startsWith('data:')) return fuenteImg;
   if (/^https?:\/\//.test(fuenteImg)) {
     const r = await fetch(fuenteImg);
     if (!r.ok) throw new Error(`No se pudo bajar imagen ${fuenteImg}: ${r.status}`);
-    const buf = Buffer.from(await r.arrayBuffer());
-    return aDataUri(buf, mimeDeBuffer(buf));
+    return normalizar(Buffer.from(await r.arrayBuffer()));
   }
-  if (fs.existsSync(fuenteImg)) {
-    const buf = fs.readFileSync(fuenteImg);
-    return aDataUri(buf, mimeDeBuffer(buf));
-  }
+  if (fs.existsSync(fuenteImg)) return normalizar(fs.readFileSync(fuenteImg));
   return null;
 }
 
@@ -102,7 +109,7 @@ function logoDataUri() {
 // Si todavía no está el PNG del logo en assets/, dibujamos una aproximación para no bloquear el render
 function logo(tam) {
   const uri = logoDataUri();
-  if (uri) return img(uri, { width: tam, height: tam });
+  if (uri) return img(uri, { width: tam, height: tam, borderRadius: tam });
   return h('div', {
     width: tam, height: tam, borderRadius: tam, backgroundColor: COLORES.lavanda,
     border: `${Math.round(tam * 0.05)}px solid ${COLORES.menta}`,
@@ -188,6 +195,207 @@ async function slideProducto(datos) {
   );
 }
 
+// --- Decoración: manchas orgánicas + chispitas ---
+//
+// Se dibuja como un SVG aparte que va de fondo a pantalla completa. Pocas piezas y en los bordes,
+// para dar calidez sin competir con el producto.
+
+// Curva cerrada suave (Catmull-Rom -> Bézier) alrededor de (cx, cy), con radios que varían por punto
+function mancha(cx, cy, r, variacion, color) {
+  const n = variacion.length;
+  const pts = variacion.map((v, i) => {
+    const a = (i / n) * Math.PI * 2;
+    return [cx + Math.cos(a) * r * v, cy + Math.sin(a) * r * v];
+  });
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ` C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return `<path d="${d} Z" fill="${color}"/>`;
+}
+
+const ICONOS = {
+  chispa: 'M12 0 C13 7 17 11 24 12 C17 13 13 17 12 24 C11 17 7 13 0 12 C7 11 11 7 12 0 Z',
+  corazon: 'M12 21 C5 15 1 11.5 1 7.5 C1 4.4 3.4 2 6.5 2 C8.6 2 10.6 3.1 12 5 C13.4 3.1 15.4 2 17.5 2 C20.6 2 23 4.4 23 7.5 C23 11.5 19 15 12 21 Z',
+  flecha: 'M2 10.5 H17.5 L12 5 L14.1 2.9 L23.2 12 L14.1 21.1 L12 19 L17.5 13.5 H2 Z',
+  estrella: 'M12 1.5 L15 8.5 L22.5 9.2 L16.8 14.2 L18.5 21.8 L12 17.8 L5.5 21.8 L7.2 14.2 L1.5 9.2 L9 8.5 Z',
+};
+
+function iconoSvg(tipo, x, y, tam, color, rot = 0) {
+  const k = tam / 24;
+  return `<path d="${ICONOS[tipo]}" fill="${color}" transform="translate(${x} ${y}) rotate(${rot} ${tam / 2} ${tam / 2}) scale(${k})"/>`;
+}
+
+// Nodo SVG de Satori con un ícono (para usar dentro de pastillas/tarjetas)
+function icono(tipo, tam, color) {
+  return {
+    type: 'svg',
+    props: {
+      width: tam, height: tam, viewBox: '0 0 24 24',
+      children: { type: 'path', props: { d: ICONOS[tipo], fill: color } },
+    },
+  };
+}
+
+// Variantes de decoración: cambian qué esquinas llevan manchas, para que las slides no se repitan
+const DECORACIONES = {
+  a: () => [
+    mancha(40, 120, 230, [1, 0.8, 1.1, 0.9, 1.2, 0.85, 1, 0.9], '#E4DEF3'),
+    mancha(1060, 1260, 260, [1, 1.15, 0.85, 1, 0.9, 1.1, 0.95, 1], '#D6EEEA'),
+    mancha(1080, 120, 120, [1, 0.9, 1.2, 1, 0.8, 1.1], '#FBE3D7'),
+    iconoSvg('chispa', 150, 380, 30, COLORES.lavanda, 0),
+    iconoSvg('corazon', 930, 300, 30, '#F2B8A0', -12),
+    iconoSvg('estrella', 70, 980, 34, '#F5D76E', 10),
+    iconoSvg('chispa', 990, 860, 24, '#8CCFC6', 0),
+  ],
+  b: () => [
+    mancha(1040, 80, 240, [1, 0.85, 1.1, 0.95, 1.2, 0.9, 1, 0.8], '#FBE3D7'),
+    mancha(0, 1300, 280, [1.1, 0.9, 1, 1.15, 0.85, 1, 0.9, 1.05], '#E4DEF3'),
+    iconoSvg('estrella', 90, 180, 30, '#F5D76E', -8),
+    iconoSvg('chispa', 960, 520, 28, COLORES.lavanda, 0),
+    iconoSvg('corazon', 110, 760, 26, '#F2B8A0', 10),
+  ],
+  c: () => [
+    mancha(0, 60, 250, [1, 1.1, 0.9, 1, 1.2, 0.85, 1.05, 0.9], '#D6EEEA'),
+    mancha(1080, 1180, 300, [1, 0.9, 1.1, 0.85, 1, 1.15, 0.9, 1], '#FFF0B3'),
+    iconoSvg('chispa', 960, 170, 30, COLORES.lavanda, 0),
+    iconoSvg('corazon', 80, 1180, 28, '#F2B8A0', -10),
+    iconoSvg('estrella', 990, 420, 26, '#8CCFC6', 12),
+  ],
+};
+
+function fondoDecorado(variante = 'a') {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${DECORACIONES[variante]().join('')}</svg>`;
+  return img(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`, { position: 'absolute', top: 0, left: 0, width: W, height: H });
+}
+
+// Foto del producto: si está recortada flota con sombra; si es foto con fondo, va en marco tipo polaroid
+function fotoProducto(src, { ancho, alto, recortada, rot = -2 }) {
+  if (!src) {
+    return h('div', {
+      width: ancho, height: alto, borderRadius: 40, border: `5px dashed ${COLORES.lavanda}`,
+      alignItems: 'center', justifyContent: 'center', color: COLORES.lavanda, fontSize: 28,
+    }, 'FOTO DEL PRODUCTO');
+  }
+  if (recortada) return img(src, { width: ancho, height: alto, objectFit: 'contain' });
+  return h('div', {
+    padding: 14, backgroundColor: COLORES.blanco, borderRadius: 36, transform: `rotate(${rot}deg)`,
+    boxShadow: '0 18px 40px rgba(82,72,108,0.18)',
+  },
+    img(src, { width: ancho - 28, height: alto - 28, objectFit: 'cover', borderRadius: 26 }),
+  );
+}
+
+function contador(indice, total, color = COLORES.violeta) {
+  return pastilla(`${indice} / ${total}`, { fondo: 'transparent', color, borde: `3px solid ${color}`, tam: 24, peso: 600, padY: 8, padX: 22 });
+}
+
+// --- Carrusel de producto único ---
+//
+// Un producto contado en varias slides, con poca información por slide:
+//   portada -> foto de detalle -> "¿qué desarrolla?" -> (cierre compartido)
+//
+// datos comunes: { nombre, gancho, bajada, edad, fotos: [..], recortada, habilidades: [{ nombre, detalle }], indice, total }
+
+async function unicoPortada(d) {
+  const foto = await cargarImagen(d.fotos?.[0]);
+  return h('div', {
+    width: W, height: H, backgroundColor: CREMA, flexDirection: 'column', alignItems: 'center',
+    padding: '56px 72px 52px', color: COLORES.violeta, fontFamily: 'Lexend', position: 'relative',
+  },
+    fondoDecorado('a'),
+    logo(150),
+    h('div', {
+      marginTop: 18, fontFamily: 'Playfair Display', fontWeight: 800, fontSize: d.nombre.length > 14 ? 96 : 120,
+      lineHeight: 1, letterSpacing: 2, textTransform: 'uppercase', textAlign: 'center', justifyContent: 'center',
+    }, d.nombre),
+    d.gancho ? h('div', {
+      marginTop: 18, fontFamily: 'Playfair Display', fontStyle: 'italic', fontWeight: 400, fontSize: 46,
+      color: COLORES.lavanda, textAlign: 'center', justifyContent: 'center',
+    }, d.gancho) : null,
+    d.edad ? h('div', { marginTop: 22 }, pastilla(d.edad, { fondo: COLORES.lavanda, color: COLORES.blanco, tam: 26, peso: 600, padY: 10 })) : null,
+    h('div', { flexGrow: 1, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
+      fotoProducto(foto, { ancho: 820, alto: 640, recortada: d.recortada }),
+    ),
+    h('div', { width: '100%', justifyContent: 'flex-end', alignItems: 'center', fontSize: 26, fontWeight: 500, marginTop: 12 },
+      h('div', { marginRight: 10 }, 'Deslizá'),
+      icono('flecha', 30, COLORES.violeta),
+    ),
+  );
+}
+
+async function unicoDetalle(d) {
+  const foto = await cargarImagen(d.fotos?.[1] || d.fotos?.[0]);
+  return h('div', {
+    width: W, height: H, backgroundColor: CREMA, flexDirection: 'column', alignItems: 'center',
+    padding: '56px 72px 52px', color: COLORES.violeta, fontFamily: 'Lexend', position: 'relative',
+  },
+    fondoDecorado('b'),
+    h('div', { width: '100%', justifyContent: 'space-between', alignItems: 'center' },
+      contador(d.indice, d.total),
+      d.edad ? pastilla(d.edad, { fondo: COLORES.lavanda, color: COLORES.blanco, tam: 24, peso: 600, padY: 8 }) : null,
+    ),
+    h('div', { flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
+      fotoProducto(foto, { ancho: 760, alto: 860, recortada: d.recortada, rot: 2 }),
+    ),
+    d.bajada ? h('div', {
+      backgroundColor: COLORES.blanco, borderRadius: 32, padding: '28px 40px', marginTop: 8,
+      fontSize: 34, lineHeight: 1.35, textAlign: 'center', justifyContent: 'center', maxWidth: 880,
+      boxShadow: '0 10px 30px rgba(82,72,108,0.10)',
+    }, d.bajada) : null,
+  );
+}
+
+const ESTILO_HABILIDAD = [
+  { icono: 'corazon', fondo: '#FBE3D7', color: '#E48F6E' },
+  { icono: 'estrella', fondo: '#FFF0B3', color: '#E0B530' },
+  { icono: 'chispa', fondo: '#D6EEEA', color: '#5FB3A8' },
+];
+
+async function unicoDesarrolla(d) {
+  const foto = await cargarImagen(d.fotos?.[0]);
+  const habs = (d.habilidades || []).slice(0, 3);
+  return h('div', {
+    width: W, height: H, backgroundColor: CREMA, flexDirection: 'column',
+    padding: '56px 72px 52px', color: COLORES.violeta, fontFamily: 'Lexend', position: 'relative',
+  },
+    fondoDecorado('c'),
+    h('div', { justifyContent: 'space-between', alignItems: 'center' },
+      contador(d.indice, d.total),
+      foto ? h('div', { width: 150, height: 150, borderRadius: 150, overflow: 'hidden', border: `8px solid ${COLORES.blanco}`, boxShadow: '0 8px 24px rgba(82,72,108,0.15)' },
+        img(foto, { width: 134, height: 134, objectFit: 'cover' })) : null,
+    ),
+    h('div', { flexDirection: 'column', marginTop: 40 },
+      h('div', { fontSize: 26, fontWeight: 600, letterSpacing: 4, color: COLORES.lavanda }, 'JUGANDO CON'),
+      h('div', { fontFamily: 'Playfair Display', fontWeight: 800, fontSize: 72, lineHeight: 1.05, textTransform: 'uppercase', marginTop: 6 }, d.nombre),
+      h('div', { fontFamily: 'Playfair Display', fontStyle: 'italic', fontWeight: 400, fontSize: 60, color: COLORES.lavanda, marginTop: 4 }, '¿qué desarrolla?'),
+    ),
+    h('div', { flexDirection: 'column', marginTop: 48, flexGrow: 1 },
+      habs.map((hab, i) => {
+        const e = ESTILO_HABILIDAD[i % ESTILO_HABILIDAD.length];
+        return h('div', {
+          backgroundColor: COLORES.blanco, borderRadius: 32, padding: '30px 36px', marginBottom: 24,
+          alignItems: 'center', boxShadow: '0 8px 24px rgba(82,72,108,0.08)',
+        },
+          h('div', { width: 84, height: 84, borderRadius: 84, backgroundColor: e.fondo, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+            icono(e.icono, 40, e.color)),
+          h('div', { flexDirection: 'column', marginLeft: 28, flexShrink: 1 },
+            h('div', { fontSize: 36, fontWeight: 600 }, hab.nombre),
+            hab.detalle ? h('div', { fontSize: 27, lineHeight: 1.35, marginTop: 6, opacity: 0.85 }, hab.detalle) : null,
+          ),
+        );
+      }),
+    ),
+    h('div', { justifyContent: 'space-between', alignItems: 'flex-end' },
+      h('div', { fontSize: 26, fontWeight: 500, opacity: 0.85, paddingBottom: 20 }, URL_TIENDA),
+      logo(120),
+    ),
+  );
+}
+
 // --- Render ---
 
 async function aPng(arbol) {
@@ -197,6 +405,9 @@ async function aPng(arbol) {
 
 const PLANTILLAS = {
   producto: slideProducto,
+  unico_portada: unicoPortada,
+  unico_detalle: unicoDetalle,
+  unico_desarrolla: unicoDesarrolla,
 };
 
 async function renderizar(plantilla, datos) {
