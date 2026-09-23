@@ -99,6 +99,14 @@ details.config .row{margin-top:12px;}
 .msg.ia{align-self:flex-start;background:var(--purple-light);color:var(--ink);border-bottom-left-radius:4px;}
 .chat-form{display:flex;gap:8px;}
 .chat-form input{flex:1;}
+.plantillas{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center;}
+.plantillas:empty{display:none;}
+.plantillas .chip button{background:none;border:none;color:var(--coral-dark);font-weight:800;cursor:pointer;margin-left:4px;font-size:13px;}
+.chat-form textarea{flex:1;min-height:46px;height:46px;resize:vertical;}
+.chat-extra{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.chat-extra .btn{font-size:13px;padding:7px 12px;}
+.trabajando{font-size:12.5px;color:var(--ink-soft);margin-top:6px;display:none;align-items:center;gap:8px;}
+.card.procesando .trabajando{display:flex;}
 .chat-ejemplos{font-size:12px;color:var(--ink-soft);margin-top:6px;}
 .card.procesando .slides{opacity:.45;transition:opacity .2s;}
 .spinner.oscuro{border-color:rgba(82,72,108,.25);border-top-color:var(--purple-dark);}
@@ -147,16 +155,20 @@ details.config .row{margin-top:12px;}
       <label class="field">Producto
         <select id="gen-producto"><option value="">Automático (el que hace más que no aparece)</option></select>
       </label>
-      <label class="field" style="flex:0 0 150px;min-width:150px;">Colores
+      <label class="field" style="flex:0 0 200px;min-width:170px;">Estilo
         <select id="gen-tema">
-          <option value="panel">Panel</option>
-          <option value="color">Color</option>
-          <option value="crema">Crema</option>
+          <optgroup label="Diseños base">
+            <option value="panel">Panel</option>
+            <option value="color">Color</option>
+            <option value="crema">Crema</option>
+          </optgroup>
+          <optgroup label="Mis plantillas" id="gen-plantillas"></optgroup>
         </select>
       </label>
       <button class="btn btn-primary" id="btn-generar" onclick="generar()">Generar</button>
     </div>
-    <p class="muted" style="margin-top:8px;">Tarda unos 30 segundos: escribe los textos, arma las 4 imágenes y las guarda como borrador.</p>
+    <p class="muted" style="margin-top:8px;">Tarda unos 30 segundos: escribe los textos, arma las imágenes y las guarda como borrador. Después la podés ajustar charlando con Claude.</p>
+    <div id="mis-plantillas" class="plantillas"></div>
   </div>
 
   <div class="tabs" id="tabs">
@@ -260,6 +272,8 @@ function render(){
     return;
   }
   cont.innerHTML = lista.map(tarjeta).join('');
+  // El chat arranca mostrando lo último que se habló
+  cont.querySelectorAll('.chat-hist').forEach(h => { h.scrollTop = h.scrollHeight; });
 }
 
 function tarjeta(b){
@@ -285,7 +299,7 @@ function tarjeta(b){
       <div class="borrador-head">
         <div>
           <h3>${esc(c.nombre || 'Publicación')}</h3>
-          <div class="meta">${esc(meta)}${c.edad ? ' · ' + esc(c.edad) : ''}${b.tema ? ' · tema ' + esc(b.tema) : ''}</div>
+          <div class="meta">${esc(meta)}${c.edad ? ' · ' + esc(c.edad) : ''}${b.tema ? ' · estilo ' + esc(b.tema) : ''}</div>
           ${habs ? `<div class="chips">${habs}</div>` : ''}
         </div>
         <div class="head-right"><span class="pill ${esc(b.estado)}">${esc(b.estado)}</span></div>
@@ -300,16 +314,23 @@ function tarjeta(b){
 }
 
 function chat(b){
-  const hist = (b.contenido?.historial || []).map(h => `<div class="msg yo">${esc(h.mensaje)}</div><div class="msg ia">${esc(h.respuesta)}</div>`).join('');
+  const c = b.contenido || {};
+  const hist = (c.historial || []).map(h => `<div class="msg yo">${esc(h.mensaje)}</div><div class="msg ia">${esc(h.respuesta)}</div>`).join('');
+  const puedeDeshacer = (c.versiones || []).length > 0;
   return `
     <div class="chat">
-      <div class="section-label">Pedile cambios</div>
+      <div class="section-label">Charlá con Claude para ajustarla</div>
       ${hist ? `<div class="chat-hist" id="hist-${b.id}">${hist}</div>` : ''}
       <form class="chat-form" onsubmit="editar(event,'${b.id}')">
-        <input type="text" id="msg-${b.id}" placeholder="Ej: cambiá el gancho por algo más divertido" autocomplete="off" maxlength="1000">
+        <textarea id="msg-${b.id}" placeholder="Ej: hacé el título más grande y poné el logo arriba a la izquierda" maxlength="1000" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.form.requestSubmit();}"></textarea>
         <button class="btn btn-primary" type="submit" id="send-${b.id}">Enviar</button>
       </form>
-      ${hist ? '' : '<p class="chat-ejemplos">Podés pedir: cambiar textos o la edad, otros colores ("usá los colores de la versión color"), otra foto en la portada, sacar una slide…</p>'}
+      <div class="trabajando"><span class="spinner oscuro"></span> Claude está trabajando… puede tardar hasta un minuto.</div>
+      ${hist ? '' : '<p class="chat-ejemplos">Pedile lo que quieras, como a una persona: cambiar textos, tamaños, colores, mover el logo, otra foto, agregar o sacar una slide, o preguntale qué le mejorarías.</p>'}
+      <div class="chat-extra">
+        ${puedeDeshacer ? `<button class="btn btn-soft" onclick="deshacer('${b.id}')">↶ Deshacer último cambio</button>` : ''}
+        <button class="btn btn-soft" onclick="guardarPlantilla('${b.id}', this)">Guardar diseño como plantilla</button>
+      </div>
     </div>`;
 }
 
@@ -323,21 +344,73 @@ async function editar(ev, id){
   card.classList.add('procesando');
   input.disabled = true; btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
+  // Mostramos el mensaje enseguida, sin esperar la respuesta
+  let hist = document.getElementById('hist-' + id);
+  if(!hist){
+    hist = document.createElement('div');
+    hist.className = 'chat-hist'; hist.id = 'hist-' + id;
+    card.querySelector('.chat-form').before(hist);
+  }
+  hist.insertAdjacentHTML('beforeend', `<div class="msg yo">${esc(mensaje)}</div>`);
+  hist.scrollTop = hist.scrollHeight;
   try{
-    const { respuesta } = await api('POST', `/instagram/borradores/${id}/editar`, { mensaje });
-    toast(respuesta);
+    await api('POST', `/instagram/borradores/${id}/editar`, { mensaje });
     await cargarBorradores();
     // Si estaba aprobado vuelve a borradores: seguimos mostrándolo donde quedó
-    const tab = document.querySelector('.tab[data-estado="borrador"]');
-    if(estadoActual !== 'borrador') cambiarTab(tab);
-    const hist = document.getElementById('hist-' + id);
-    if(hist) hist.scrollTop = hist.scrollHeight;
+    if(estadoActual !== 'borrador') cambiarTab(document.querySelector('.tab[data-estado="borrador"]'));
+    const h = document.getElementById('hist-' + id);
+    if(h) h.scrollTop = h.scrollHeight;
     document.getElementById('msg-' + id)?.focus();
   }catch(e){
     toast(e.message);
     card.classList.remove('procesando');
     input.disabled = false; btn.disabled = false; btn.textContent = 'Enviar';
+    input.value = mensaje;
   }
+}
+
+async function deshacer(id){
+  try{
+    await api('POST', `/instagram/borradores/${id}/deshacer`);
+    toast('Volvió a la versión anterior');
+    await cargarBorradores();
+  }catch(e){ toast(e.message); }
+}
+
+async function guardarPlantilla(id, btn){
+  const nombre = prompt('¿Qué nombre le ponemos a esta plantilla?');
+  if(!nombre || !nombre.trim()) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner oscuro"></span> Guardando…';
+  try{
+    await api('POST', `/instagram/borradores/${id}/guardar-plantilla`, { nombre: nombre.trim() });
+    toast('Plantilla guardada: la vas a encontrar en "Estilo"');
+    await cargarPlantillas();
+  }catch(e){ toast(e.message); }
+  btn.disabled = false; btn.textContent = 'Guardar diseño como plantilla';
+}
+
+async function cargarPlantillas(){
+  try{
+    const { plantillas } = await api('GET', '/instagram/plantillas');
+    misPlantillas = plantillas;
+    document.getElementById('gen-plantillas').innerHTML = plantillas.map(p => `<option value="plantilla:${esc(p.id)}">${esc(p.nombre)}</option>`).join('');
+    document.getElementById('mis-plantillas').innerHTML = plantillas.length
+      ? '<span class="muted">Mis plantillas:</span>' + plantillas.map(p => `<span class="chip">${esc(p.nombre)}<button title="Borrar plantilla" onclick="borrarPlantilla('${esc(p.id)}')">✕</button></span>`).join('')
+      : '';
+  }catch(e){ /* sin conexión: lo muestra cargarBorradores */ }
+}
+
+let misPlantillas = [];
+
+async function borrarPlantilla(id){
+  const nombre = misPlantillas.find(p => p.id === id)?.nombre || '';
+  if(!confirm(`¿Borrar la plantilla "${nombre}"?`)) return;
+  try{
+    await api('DELETE', `/instagram/plantillas/${id}`);
+    toast('Plantilla borrada');
+    await cargarPlantillas();
+  }catch(e){ toast(e.message); }
 }
 
 async function generar(){
@@ -345,7 +418,8 @@ async function generar(){
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Generando…';
   try{
-    const body = { tema: document.getElementById('gen-tema').value };
+    const estilo = document.getElementById('gen-tema').value;
+    const body = estilo.startsWith('plantilla:') ? { plantilla_id: estilo.slice(10) } : { tema: estilo };
     const prod = document.getElementById('gen-producto').value;
     if(prod) body.producto_id = prod;
     await api('POST', '/instagram/generar', body);
@@ -399,6 +473,7 @@ function iniciar(){
   if(!leer(CLAVE_KEY)) document.getElementById('config').open = true;
   cargarBorradores();
   cargarCandidatos();
+  cargarPlantillas();
 }
 iniciar();
 </script>

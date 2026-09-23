@@ -419,27 +419,28 @@ app.patch('/productos-pendientes/:id', async (req, res) => {
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 // Llamada a la API de Anthropic, compartida con los módulos (ej. instagram-agente.js).
-// Devuelve el texto de la respuesta; tira error si la API falla.
-async function llamarClaude(prompt, { maxTokens = 500, model = 'claude-sonnet-4-6' } = {}) {
-  const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
+// `entrada` puede ser un texto, una lista de bloques (texto + imágenes) o una conversación completa
+// ([{ role, content }, ...]). Devuelve el texto de la respuesta; tira error si la API falla.
+async function llamarClaude(entrada, { maxTokens = 500, model = 'claude-sonnet-4-6', system, effort, fallback = false } = {}) {
+  const messages = Array.isArray(entrada) && entrada[0]?.role ? entrada : [{ role: 'user', content: entrada }];
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-api-key': ANTHROPIC_API_KEY,
+    'anthropic-version': '2023-06-01',
+  };
+  const body = { model, max_tokens: maxTokens, messages };
+  if (system) body.system = system;
+  if (effort) body.output_config = { effort };
+  // Si el modelo declina el pedido por sus filtros de seguridad, la API lo reintenta con otro modelo
+  if (fallback) { headers['anthropic-beta'] = 'server-side-fallback-2026-07-01'; body.fallbacks = 'default'; }
+  const aiRes = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(body) });
   if (!aiRes.ok) {
     const t = await aiRes.text();
     throw new Error(`Error llamando a la IA: ${aiRes.status} ${t}`);
   }
   const aiData = await aiRes.json();
-  return aiData.content?.[0]?.text || '';
+  if (aiData.stop_reason === 'refusal') throw new Error('La IA no pudo procesar este pedido; probá reformularlo');
+  return (aiData.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
 }
 
 app.post('/proveedores/upload-excel', (req, res, next) => {
