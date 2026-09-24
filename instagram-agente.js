@@ -354,6 +354,80 @@ async function generarInstitucional(sb, llamarClaude, { idea, programadoPara } =
   return borrador;
 }
 
+// --- Carrusel de varios productos ---
+//
+// Claude elige 3 productos que combinen (un tema) entre los próximos de la rotación y escribe los textos.
+// Slides: portada con las fotos en círculos, una por producto y el cierre.
+
+function promptMulti(lista, idea) {
+  return `Sos quien escribe las publicaciones de Instagram de "Crear y Jugar", una juguetería didáctica de Olivos (Buenos Aires). Escribís en español rioplatense (voseo), con tono cálido y pedagógico, pensando en madres, padres, docentes y quienes regalan.
+
+Vamos a armar un carrusel con 3 productos que tengan algo en común (un tema: por ejemplo arte y manualidades, encastre y construcción, primeros años, juegos de mesa, ciencia, juego al aire libre).
+${idea ? `Tema pedido por la dueña: ${idea}. Elegí los 3 productos que mejor encajen.` : 'Elegí vos el tema que mejor agrupe 3 productos de la lista, dándole prioridad a los primeros (son los que hace más que no se publican).'}
+
+Productos disponibles (id | nombre | descripción | categoría | marca):
+${lista.map((p) => `${p.id} | ${p.nombre} | ${(p.descripcion || '-').slice(0, 160)} | ${p.categoria || p.categoria_grande || '-'} | ${p.proveedor || '-'}`).join('\n')}
+
+Reglas:
+- Usá solo ids de la lista, exactamente como aparecen.
+- NUNCA menciones precios, descuentos ni cuotas. No inventes contenidos, piezas ni características que no surjan del nombre o la descripción; si hay poca información, hablá de lo que ese tipo de juego propone en general.
+- Sin emojis en título, subtítulo ni textos de productos. En el caption podés usar pocos (2 o 3 como máximo).
+
+Devolvé ÚNICAMENTE un JSON válido:
+{
+  "titulo": "título del tema (máx. 32 caracteres)",
+  "subtitulo": "bajada que invite a deslizar (máx. 70 caracteres)",
+  "productos": [
+    { "id": "...", "nombre": "nombre corto para mostrar (máx. 22 caracteres, sin códigos ni medidas)", "edad": "+N años o N a M años", "frase": "qué desarrolla este juego (máx. 90 caracteres)", "habilidades": ["1 a 3 palabras", "1 a 3 palabras"] }
+  ],
+  "caption": "texto del posteo: 2 o 3 párrafos cortos que presenten el tema y los productos, cierre invitando a la tienda online (link en la bio) o al local en Ricardo Gutiérrez 1215, Olivos. Al final, en una línea aparte, entre 8 y 12 hashtags en español (incluí #CrearYJugar y #JuguetesDidacticos)."
+}
+Tienen que ser exactamente 3 productos distintos.`;
+}
+
+async function htmlSlidesMulti(contenido, productosPorId) {
+  const prods = contenido.productos;
+  const total = prods.length + 2;
+  const html = [await htmlDePlantilla('multi_portada', {
+    titulo: contenido.titulo, subtitulo: contenido.subtitulo,
+    fotos: prods.map((p) => imagenesDe(productosPorId[p.id])[0]),
+  })];
+  for (const [i, p] of prods.entries()) {
+    html.push(await htmlDePlantilla('producto', {
+      nombre: p.nombre, edad: p.edad, frase: p.frase, habilidades: p.habilidades,
+      foto: imagenesDe(productosPorId[p.id])[0], indice: i + 2, total,
+    }));
+  }
+  html.push(await htmlDePlantilla('cierre', { indice: total, total }));
+  return html;
+}
+
+async function generarMulti(sb, llamarClaude, { idea, programadoPara } = {}) {
+  const lista = (await candidatos(sb)).slice(0, 25);
+  if (lista.length < 3) throw new Error('Hacen falta al menos 3 productos con foto y stock');
+  const t = parsearJson(await llamarClaude(promptMulti(lista, idea), { maxTokens: 2500 }));
+  const porId = Object.fromEntries(lista.map((p) => [p.id, p]));
+  const productos = (t.productos || [])
+    .filter((p, i, arr) => porId[p?.id] && arr.findIndex((x) => x.id === p.id) === i)
+    .slice(0, 3)
+    .map((p) => ({
+      id: p.id, nombre: String(p.nombre || porId[p.id].nombre).slice(0, 40), edad: p.edad || '',
+      frase: p.frase || '', habilidades: (p.habilidades || []).filter((x) => typeof x === 'string').slice(0, 3),
+    }));
+  if (productos.length < 2) throw new Error('La IA no eligió productos válidos; probá de nuevo');
+  if (!t.titulo) throw new Error('La IA no devolvió el título; probá de nuevo');
+  if (/\$\s?\d|\bprecios?\b/i.test(t.caption || '')) throw new Error('El caption generado menciona precios; volvé a generar');
+
+  const contenido = { nombre: t.titulo, titulo: t.titulo, subtitulo: t.subtitulo || '', productos, idea: idea || null, historial: [], versiones: [] };
+  contenido.html_slides = await htmlSlidesMulti(contenido, porId);
+  const slides = await renderizarYSubir(contenido.html_slides);
+  const [borrador] = await sb('POST', 'publicaciones_borrador', {
+    body: { tipo: 'multi', tema: 'varios productos', producto_ids: productos.map((p) => p.id), contenido, caption: t.caption, slides, programado_para: programadoPara || null },
+    prefer: 'return=representation',
+  });
+  return borrador;
+}
+
 // --- 5b. Edición por chat ---
 //
 // Conversación libre con Claude sobre el borrador. Claude ve cómo quedaron las slides (imágenes) y su
@@ -420,13 +494,15 @@ async function miniaturas(urls) {
 
 async function editarBorrador(sb, llamarClaude, borrador, mensaje) {
   const contenido = { ...(borrador.contenido || {}) };
-  // Las publicaciones institucionales no tienen producto: solo pueden usar el logo como imagen
-  const producto = borrador.producto_ids?.length ? await buscarProducto(sb, borrador.producto_ids[0]) : null;
-  if (borrador.producto_ids?.length && !producto) throw new Error('El producto de este borrador ya no existe');
+  // Las publicaciones institucionales no tienen producto: solo pueden usar el logo como imagen.
+  // Los carruseles de varios productos pueden usar las fotos de todos sus productos.
+  const productos = (await Promise.all((borrador.producto_ids || []).map((id) => buscarProducto(sb, id)))).filter(Boolean);
+  if (borrador.producto_ids?.length && !productos.length) throw new Error('Los productos de este borrador ya no existen');
+  const producto = productos[0] || null;
   // Borradores generados antes del chat libre: se arma el HTML desde las plantillas
   const htmlActual = contenido.html_slides?.length ? contenido.html_slides : await htmlSlidesUnico(producto, contenido, borrador.tema || TEMA);
   const historial = contenido.historial || [];
-  const permitidas = producto ? fuentesPermitidas(producto, contenido) : new Set(['asset:logo']);
+  const permitidas = new Set(['asset:logo', ...productos.flatMap((p) => [...fuentesPermitidas(p, contenido)])]);
 
   const imgs = await miniaturas(borrador.slides || []);
   const bloques = [];
@@ -436,8 +512,8 @@ async function editarBorrador(sb, llamarClaude, borrador, mensaje) {
   });
   bloques.push({
     type: 'text',
-    text: `${producto
-    ? `Producto: ${producto.nombre} — ${producto.descripcion || '(sin descripción)'} (marca: ${producto.proveedor || 'sin dato'})`
+    text: `${productos.length
+    ? productos.map((p) => `Producto: ${p.nombre} — ${p.descripcion || '(sin descripción)'} (marca: ${p.proveedor || 'sin dato'})`).join('\n')
     : 'Publicación institucional de la marca (sin producto).'}
 
 Imágenes que podés usar en src: ${[...permitidas].join(' , ')}
@@ -836,18 +912,21 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
     } catch (e) { err(res, e.message); }
   });
 
-  // Genera un borrador. Body: { tipo: 'unico' | 'institucional', producto_id?, tema?, plantilla_id?, idea?, programado_para? }
+  // Genera un borrador. Body: { tipo: 'unico' | 'multi' | 'institucional', producto_id?, tema?, plantilla_id?, idea?, programado_para? }
   app.post('/instagram/generar', requiereClave, async (req, res) => {
     const { tipo = 'unico', producto_id, tema, plantilla_id, programado_para, idea } = req.body || {};
-    if (!['unico', 'institucional'].includes(tipo)) return err(res, `Tipo de publicación no disponible todavía: ${tipo}`, 400);
+    if (!['unico', 'institucional', 'multi'].includes(tipo)) return err(res, `Tipo de publicación no disponible todavía: ${tipo}`, 400);
     if (programado_para && Number.isNaN(Date.parse(programado_para))) return err(res, 'Fecha inválida', 400);
     if (estado.generando) return err(res, 'Ya hay una publicación generándose, probá en un rato', 409);
     estado.generando = true;
     try {
       const programadoPara = programado_para ? new Date(programado_para).toISOString() : undefined;
+      const ideaLimpia = String(idea || '').trim().slice(0, 300) || null;
       const borrador = tipo === 'institucional'
-        ? await generarInstitucional(sb, llamarClaude, { idea: String(idea || '').trim().slice(0, 300) || null, programadoPara })
-        : await generarProductoUnico(sb, llamarClaude, { productoId: producto_id, tema, plantillaId: plantilla_id, programadoPara });
+        ? await generarInstitucional(sb, llamarClaude, { idea: ideaLimpia, programadoPara })
+        : tipo === 'multi'
+          ? await generarMulti(sb, llamarClaude, { idea: ideaLimpia, programadoPara })
+          : await generarProductoUnico(sb, llamarClaude, { productoId: producto_id, tema, plantillaId: plantilla_id, programadoPara });
       ok(res, { borrador });
     } catch (e) { err(res, e.message); }
     finally { estado.generando = false; }

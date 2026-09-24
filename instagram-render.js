@@ -156,8 +156,9 @@ async function slideProducto(datos) {
   const fondoPastilla = esBlanco ? '#EFECF6' : COLORES.blanco;
   const halo = esBlanco ? COLORES.menta : 'rgba(255,255,255,0.55)';
 
+  // Foto recortada: flota sobre el halo. Foto con fondo: en marco polaroid, inclinado para un lado u otro
   const zonaFoto = foto
-    ? img(foto, { width: 760, height: 620, objectFit: 'contain' })
+    ? (datos.recortada ? img(foto, { width: 760, height: 620, objectFit: 'contain' }) : fotoProducto(foto, { ancho: 700, alto: 580, recortada: false, rot: indice % 2 ? 2 : -2 }))
     : h('div', {
       width: 620, height: 560, borderRadius: 48, border: `6px dashed ${COLORES.violeta}`,
       display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
