@@ -173,11 +173,12 @@ details.config .row{margin-top:12px;}
     <div class="row">
       <label class="field" style="flex:0 0 200px;min-width:170px;">Tipo
         <select id="gen-tipo" onchange="cambiarTipo()">
-          <option value="unico">Producto (carrusel)</option>
+          <option value="unico">Un producto (carrusel)</option>
+          <option value="multi">Varios productos (carrusel)</option>
           <option value="institucional">Institucional (frase)</option>
         </select>
       </label>
-      <label class="field solo-institucional" style="display:none;">Idea (opcional)
+      <label class="field solo-institucional" style="display:none;">Idea o tema (opcional)
         <input type="text" id="gen-idea" placeholder="Ej: por qué es bueno jugar en familia" maxlength="300">
       </label>
       <label class="field solo-producto">Producto
@@ -686,9 +687,13 @@ async function guardarAgenda(){
 }
 
 function cambiarTipo(){
-  const inst = document.getElementById('gen-tipo').value === 'institucional';
-  document.querySelectorAll('.solo-producto').forEach(e => { e.style.display = inst ? 'none' : ''; });
-  document.querySelectorAll('.solo-institucional').forEach(e => { e.style.display = inst ? '' : 'none'; });
+  const tipo = document.getElementById('gen-tipo').value;
+  const conIdea = tipo !== 'unico';
+  document.querySelectorAll('.solo-producto').forEach(e => { e.style.display = conIdea ? 'none' : ''; });
+  document.querySelectorAll('.solo-institucional').forEach(e => { e.style.display = conIdea ? '' : 'none'; });
+  document.getElementById('gen-idea').placeholder = tipo === 'multi'
+    ? 'Tema, ej: juegos de arte, encastre, para bebés (o vacío y elige Claude)'
+    : 'Ej: por qué es bueno jugar en familia';
 }
 
 async function generar(){
@@ -698,11 +703,11 @@ async function generar(){
   try{
     const estilo = document.getElementById('gen-tema').value;
     const tipo = document.getElementById('gen-tipo').value;
-    const body = tipo === 'institucional'
+    const body = tipo !== 'unico'
       ? { tipo, idea: document.getElementById('gen-idea').value.trim() }
       : estilo.startsWith('plantilla:') ? { plantilla_id: estilo.slice(10) } : { tema: estilo };
     const prod = document.getElementById('gen-producto').value;
-    if(prod && tipo !== 'institucional') body.producto_id = prod;
+    if(prod && tipo === 'unico') body.producto_id = prod;
     await api('POST', '/instagram/generar', body);
     toast('Borrador listo');
     cambiarTab(document.querySelector('.tab[data-estado="borrador"]'));
