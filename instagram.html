@@ -601,11 +601,14 @@ function renderCalendario(){
         <button class="btn btn-soft" onclick="editarAgenda()">Cambiar días y horarios</button>
         <button class="btn btn-soft" onclick="probarConexion(this)">Probar conexión con Instagram</button>
       </div>
-      <div id="estado-ig" class="muted" style="margin-top:8px;"></div>
+      <div id="estado-ig" class="muted" style="margin-top:8px;">${estadoConexion}</div>
       <div id="editor-agenda"></div>
     </div>
     ${dias || '<div class="card vacio"><p class="muted">No hay nada en los próximos días.</p></div>'}`;
 }
+
+// Resultado de la última prueba de conexión (se mantiene aunque el calendario se vuelva a dibujar)
+let estadoConexion = '';
 
 async function probarConexion(btn){
   btn.disabled = true;
@@ -613,11 +616,11 @@ async function probarConexion(btn){
   el.textContent = 'Probando…';
   try{
     const r = await api('GET', '/instagram/conexion');
-    el.innerHTML = r.conectado
+    estadoConexion = r.conectado
       ? `✅ Conectado como <b>@${esc(r.usuario)}</b>. Los aprobados se publican solos a su hora.${r.vence ? ` (La conexión se renueva sola; vence el ${esc(new Date(r.vence).toLocaleDateString('es-AR', ZONA))} si no se renueva.)` : ''}`
       : `❌ No conectado: ${esc(r.motivo)}`;
     await cargarAgenda(); render();
-  }catch(e){ el.textContent = e.message; }
+  }catch(e){ estadoConexion = esc(e.message); render(); }
   btn.disabled = false;
 }
 
