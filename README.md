@@ -110,7 +110,7 @@ El logo va en `assets/logo-crear-y-jugar.png`.
 **Rutas**
 
 - `GET /instagram/candidatos?n=10` — próximos productos según la rotación
-- `POST /instagram/generar` — `{ "producto_id"?: "...", "tema"?: "panel", "plantilla_id"?: "..." }` genera un carrusel de un producto y lo guarda como borrador
+- `POST /instagram/generar` — `{ "tipo"?: "unico" | "institucional", "producto_id"?: "...", "tema"?: "panel", "plantilla_id"?: "...", "idea"?: "..." }` genera un carrusel de un producto y lo guarda como borrador
 - `GET /instagram/borradores?estado=borrador` — lista
 - `GET /instagram/borradores/:id`
 - `PATCH /instagram/borradores/:id` — `{ "caption"?: "...", "estado"?: "aprobado" | "borrador" }`
