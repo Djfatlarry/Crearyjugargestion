@@ -171,10 +171,19 @@ details.config .row{margin-top:12px;}
   <div class="card">
     <div class="section-label">Nueva publicación</div>
     <div class="row">
-      <label class="field">Producto
+      <label class="field" style="flex:0 0 200px;min-width:170px;">Tipo
+        <select id="gen-tipo" onchange="cambiarTipo()">
+          <option value="unico">Producto (carrusel)</option>
+          <option value="institucional">Institucional (frase)</option>
+        </select>
+      </label>
+      <label class="field solo-institucional" style="display:none;">Idea (opcional)
+        <input type="text" id="gen-idea" placeholder="Ej: por qué es bueno jugar en familia" maxlength="300">
+      </label>
+      <label class="field solo-producto">Producto
         <select id="gen-producto"><option value="">Automático (el que hace más que no aparece)</option></select>
       </label>
-      <label class="field" style="flex:0 0 200px;min-width:170px;">Estilo
+      <label class="field solo-producto" style="flex:0 0 200px;min-width:170px;">Estilo
         <select id="gen-tema">
           <optgroup label="Diseños base">
             <option value="panel">Panel</option>
@@ -325,7 +334,7 @@ function tarjeta(b){
     <div class="card" id="b-${b.id}">
       <div class="borrador-head">
         <div>
-          <h3>${esc(c.nombre || 'Publicación')}</h3>
+          <h3>${esc(b.tipo === 'institucional' ? (c.frase || 'Institucional') : (c.nombre || 'Publicación'))}</h3>
           <div class="meta">${esc(meta)}${c.edad ? ' · ' + esc(c.edad) : ''}${b.tema ? ' · estilo ' + esc(b.tema) : ''}</div>
           ${habs ? `<div class="chips">${habs}</div>` : ''}
         </div>
@@ -358,7 +367,7 @@ function chat(b){
       ${hist ? '' : '<p class="chat-ejemplos">Pedile lo que quieras, como a una persona: cambiar textos, tamaños, colores, mover el logo, otra foto, agregar o sacar una slide, o preguntale qué le mejorarías.</p>'}
       <div class="chat-extra">
         ${puedeDeshacer ? `<button class="btn btn-soft" onclick="deshacer('${b.id}')">↶ Deshacer último cambio</button>` : ''}
-        <button class="btn btn-soft" onclick="guardarPlantilla('${b.id}', this)">Guardar diseño como plantilla</button>
+        ${b.tipo === 'unico' ? `<button class="btn btn-soft" onclick="guardarPlantilla('${b.id}', this)">Guardar diseño como plantilla</button>` : ''}
       </div>
     </div>`;
 }
@@ -676,15 +685,24 @@ async function guardarAgenda(){
   }catch(e){ toast(e.message); }
 }
 
+function cambiarTipo(){
+  const inst = document.getElementById('gen-tipo').value === 'institucional';
+  document.querySelectorAll('.solo-producto').forEach(e => { e.style.display = inst ? 'none' : ''; });
+  document.querySelectorAll('.solo-institucional').forEach(e => { e.style.display = inst ? '' : 'none'; });
+}
+
 async function generar(){
   const btn = document.getElementById('btn-generar');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Generando…';
   try{
     const estilo = document.getElementById('gen-tema').value;
-    const body = estilo.startsWith('plantilla:') ? { plantilla_id: estilo.slice(10) } : { tema: estilo };
+    const tipo = document.getElementById('gen-tipo').value;
+    const body = tipo === 'institucional'
+      ? { tipo, idea: document.getElementById('gen-idea').value.trim() }
+      : estilo.startsWith('plantilla:') ? { plantilla_id: estilo.slice(10) } : { tema: estilo };
     const prod = document.getElementById('gen-producto').value;
-    if(prod) body.producto_id = prod;
+    if(prod && tipo !== 'institucional') body.producto_id = prod;
     await api('POST', '/instagram/generar', body);
     toast('Borrador listo');
     cambiarTab(document.querySelector('.tab[data-estado="borrador"]'));

@@ -313,6 +313,47 @@ async function generarProductoUnico(sb, llamarClaude, { productoId, tema = TEMA,
   return borrador;
 }
 
+// --- Publicación institucional (imagen única, sin producto) ---
+
+function promptInstitucional(idea, previas) {
+  return `Sos quien escribe las publicaciones de Instagram de "Crear y Jugar", una juguetería didáctica de Olivos (Buenos Aires). Escribís en español rioplatense (voseo), con tono cálido y pedagógico, pensando en madres, padres, docentes y quienes regalan.
+
+Esta vez es una publicación institucional (sin producto): una imagen con una frase grande y un texto corto, que transmita qué es Crear y Jugar y por qué el juego importa.
+${idea ? `Idea de la dueña para esta publicación: ${idea}` : 'Elegí vos el tema: por ejemplo el juego y el aprendizaje, jugar en familia, cómo elegir un juguete según la edad, el juego libre, la curiosidad, o el local como lugar para descubrir.'}
+${previas.length ? `Frases que ya usamos (no las repitas ni hagas algo muy parecido):
+${previas.map((f) => `- ${f}`).join('\n')}` : ''}
+
+Reglas:
+- NUNCA menciones precios, descuentos ni cuotas. No inventes datos del local (horarios, promociones, eventos).
+- Sin emojis en la frase ni en el texto. En el caption podés usar pocos (2 o 3 como máximo).
+- Frases cortas y concretas; nada de palabras rimbombantes.
+
+Devolvé ÚNICAMENTE un JSON válido:
+{
+  "frase": "frase principal, memorable (máx. 70 caracteres)",
+  "texto": "texto que la acompaña (máx. 170 caracteres)",
+  "caption": "texto del posteo: 2 párrafos cortos, cálido, que cierre invitando a visitar la tienda online (link en la bio) o el local en Ricardo Gutiérrez 1215, Olivos. Al final, en una línea aparte, entre 8 y 12 hashtags en español (incluí #CrearYJugar y #JuguetesDidacticos)."
+}`;
+}
+
+async function generarInstitucional(sb, llamarClaude, { idea, programadoPara } = {}) {
+  const previas = (await sb('GET', 'publicaciones_borrador', { select: 'contenido', filter: 'tipo=eq.institucional', order: 'created_at.desc', limit: 10 }) || [])
+    .map((b) => b.contenido?.frase).filter(Boolean);
+  const t = parsearJson(await llamarClaude(promptInstitucional(idea, previas), { maxTokens: 1500 }));
+  if (!t.frase || !t.texto) throw new Error('La IA no devolvió la frase; probá de nuevo');
+  if (/\$\s?\d|\bprecios?\b/i.test(t.caption || '')) throw new Error('El caption generado menciona precios; volvé a generar');
+  const contenido = {
+    nombre: 'Institucional', frase: t.frase, texto: t.texto, idea: idea || null, historial: [], versiones: [],
+    html_slides: [await htmlDePlantilla('institucional', { frase: t.frase, texto: t.texto })],
+  };
+  const slides = await renderizarYSubir(contenido.html_slides);
+  const [borrador] = await sb('POST', 'publicaciones_borrador', {
+    body: { tipo: 'institucional', tema: 'institucional', producto_ids: [], contenido, caption: t.caption, slides, programado_para: programadoPara || null },
+    prefer: 'return=representation',
+  });
+  return borrador;
+}
+
 // --- 5b. Edición por chat ---
 //
 // Conversación libre con Claude sobre el borrador. Claude ve cómo quedaron las slides (imágenes) y su
@@ -378,14 +419,14 @@ async function miniaturas(urls) {
 }
 
 async function editarBorrador(sb, llamarClaude, borrador, mensaje) {
-  if (borrador.tipo !== 'unico') throw new Error('Por ahora solo se pueden editar carruseles de un producto');
-  const producto = await buscarProducto(sb, borrador.producto_ids?.[0]);
-  if (!producto) throw new Error('El producto de este borrador ya no existe');
   const contenido = { ...(borrador.contenido || {}) };
+  // Las publicaciones institucionales no tienen producto: solo pueden usar el logo como imagen
+  const producto = borrador.producto_ids?.length ? await buscarProducto(sb, borrador.producto_ids[0]) : null;
+  if (borrador.producto_ids?.length && !producto) throw new Error('El producto de este borrador ya no existe');
   // Borradores generados antes del chat libre: se arma el HTML desde las plantillas
   const htmlActual = contenido.html_slides?.length ? contenido.html_slides : await htmlSlidesUnico(producto, contenido, borrador.tema || TEMA);
   const historial = contenido.historial || [];
-  const permitidas = fuentesPermitidas(producto, contenido);
+  const permitidas = producto ? fuentesPermitidas(producto, contenido) : new Set(['asset:logo']);
 
   const imgs = await miniaturas(borrador.slides || []);
   const bloques = [];
@@ -395,7 +436,9 @@ async function editarBorrador(sb, llamarClaude, borrador, mensaje) {
   });
   bloques.push({
     type: 'text',
-    text: `Producto: ${producto.nombre} — ${producto.descripcion || '(sin descripción)'} (marca: ${producto.proveedor || 'sin dato'})
+    text: `${producto
+    ? `Producto: ${producto.nombre} — ${producto.descripcion || '(sin descripción)'} (marca: ${producto.proveedor || 'sin dato'})`
+    : 'Publicación institucional de la marca (sin producto).'}
 
 Imágenes que podés usar en src: ${[...permitidas].join(' , ')}
 
@@ -495,6 +538,7 @@ async function deshacerBorrador(sb, borrador) {
 
 // Convierte el diseño de un borrador en plantilla: Claude reemplaza lo propio del producto por marcadores
 async function guardarComoPlantilla(sb, llamarClaude, borrador, nombre) {
+  if (borrador.tipo !== 'unico') throw new Error('Por ahora solo se pueden guardar como plantilla los carruseles de producto');
   const producto = await buscarProducto(sb, borrador.producto_ids?.[0]);
   if (!producto) throw new Error('El producto de este borrador ya no existe');
   const contenido = borrador.contenido || {};
@@ -792,18 +836,18 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
     } catch (e) { err(res, e.message); }
   });
 
-  // Genera un borrador. Body: { tipo: 'unico', producto_id?, tema? }
+  // Genera un borrador. Body: { tipo: 'unico' | 'institucional', producto_id?, tema?, plantilla_id?, idea?, programado_para? }
   app.post('/instagram/generar', requiereClave, async (req, res) => {
-    const { tipo = 'unico', producto_id, tema, plantilla_id, programado_para } = req.body || {};
-    if (tipo !== 'unico') return err(res, `Tipo de publicación no disponible todavía: ${tipo}`, 400);
+    const { tipo = 'unico', producto_id, tema, plantilla_id, programado_para, idea } = req.body || {};
+    if (!['unico', 'institucional'].includes(tipo)) return err(res, `Tipo de publicación no disponible todavía: ${tipo}`, 400);
     if (programado_para && Number.isNaN(Date.parse(programado_para))) return err(res, 'Fecha inválida', 400);
     if (estado.generando) return err(res, 'Ya hay una publicación generándose, probá en un rato', 409);
     estado.generando = true;
     try {
-      const borrador = await generarProductoUnico(sb, llamarClaude, {
-        productoId: producto_id, tema, plantillaId: plantilla_id,
-        programadoPara: programado_para ? new Date(programado_para).toISOString() : undefined,
-      });
+      const programadoPara = programado_para ? new Date(programado_para).toISOString() : undefined;
+      const borrador = tipo === 'institucional'
+        ? await generarInstitucional(sb, llamarClaude, { idea: String(idea || '').trim().slice(0, 300) || null, programadoPara })
+        : await generarProductoUnico(sb, llamarClaude, { productoId: producto_id, tema, plantillaId: plantilla_id, programadoPara });
       ok(res, { borrador });
     } catch (e) { err(res, e.message); }
     finally { estado.generando = false; }
