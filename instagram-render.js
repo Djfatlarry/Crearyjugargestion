@@ -541,6 +541,180 @@ async function cierre(d = {}) {
   );
 }
 
+// --- Plantillas: carrusel de varios productos, producto en una imagen, institucional y fecha especial ---
+
+// Capa de decoración a pantalla completa con las piezas (manchas, chispitas, corazones) que se le pasen
+function capaSvg(piezas) {
+  return { type: 'svg', props: { width: W, height: H, viewBox: `0 0 ${W} ${H}`, style: { position: 'absolute', top: 0, left: 0 }, children: piezas.filter(Boolean) } };
+}
+
+function logoConAro(tam, aro = COLORES.blanco) {
+  return h('div', { padding: Math.round(tam * 0.05), borderRadius: tam, backgroundColor: aro }, logo(tam));
+}
+
+function lineaIcono(tipo, texto, color, tam = 30) {
+  return h('div', { alignItems: 'center', gap: 12, fontSize: tam, fontWeight: 500, color },
+    icono(tipo, Math.round(tam * 1.1), color), h('div', {}, texto));
+}
+
+// Portada del carrusel de varios productos: tema del carrusel y las fotos en círculos de colores
+// d: { titulo, subtitulo, etiqueta?, fotos: [hasta 3 URLs] }
+async function multiPortada(d) {
+  const fotos = (d.fotos || []).slice(0, 3).map(refImagen);
+  const circulos = [
+    { tam: 470, left: 0, top: 70, aro: COLORES.menta },
+    { tam: 360, left: 560, top: 10, aro: COLORES.durazno },
+    { tam: 330, left: 450, top: 360, aro: COLORES.manteca },
+  ];
+  return h('div', {
+    width: W, height: H, backgroundColor: COLORES.lavanda, flexDirection: 'column',
+    padding: '72px 72px 56px', color: COLORES.blanco, fontFamily: 'Lexend', position: 'relative',
+  },
+    capaSvg([
+      mancha(1060, 90, 250, [1, 0.85, 1.1, 0.95, 1.2, 0.9, 1, 0.8], '#9D92C5'),
+      mancha(20, 1290, 270, [1.1, 0.9, 1, 1.15, 0.85, 1, 0.9, 1.05], '#8174AE'),
+      iconoSvg('chispa', 930, 330, 34, COLORES.manteca, 0),
+      iconoSvg('estrella', 80, 610, 30, COLORES.menta, 12),
+      iconoSvg('corazon', 980, 1040, 30, COLORES.durazno, -10),
+      iconoSvg('chispa', 1000, 640, 24, COLORES.blanco, 0),
+    ]),
+    h('div', {},
+      pastilla(d.etiqueta || 'JUEGOS QUE ENSEÑAN', { fondo: 'rgba(255,255,255,0.18)', color: COLORES.blanco, tam: 24, peso: 600, padY: 10, padX: 24 })),
+    h('div', { marginTop: 28, fontFamily: 'Playfair Display', fontWeight: 800, fontSize: d.titulo.length > 28 ? 84 : 100, lineHeight: 1.02, maxWidth: 900 }, d.titulo),
+    d.subtitulo ? h('div', { marginTop: 22, fontSize: 34, lineHeight: 1.4, maxWidth: 820, opacity: 0.92 }, d.subtitulo) : null,
+    // Fotos en círculos superpuestos
+    h('div', { flexGrow: 1, position: 'relative', marginTop: 20 },
+      ...fotos.map((f, i) => {
+        const c = circulos[i];
+        return h('div', {
+          position: 'absolute', left: c.left, top: c.top, width: c.tam, height: c.tam, borderRadius: c.tam,
+          backgroundColor: c.aro, padding: 14, boxShadow: '0 16px 40px rgba(42,37,54,0.25)',
+        }, img(f, { width: c.tam - 28, height: c.tam - 28, borderRadius: c.tam, objectFit: 'cover' }));
+      }),
+    ),
+    h('div', { justifyContent: 'space-between', alignItems: 'flex-end' },
+      h('div', { alignItems: 'center', gap: 12, fontSize: 30, fontWeight: 600, paddingBottom: 30 }, h('div', {}, 'Deslizá'), icono('flecha', 34, COLORES.blanco)),
+      logoConAro(130),
+    ),
+  );
+}
+
+// Un producto en una sola imagen: nombre, bajada, edad, foto y bloque "¿Qué desarrolla?"
+// d: { nombre, bajada (o gancho), edad, fotos: [..], habilidades: [{ nombre }] }
+async function productoImagen(d) {
+  const foto = refImagen(fotoDe(d, 'fotoPortada', 0));
+  const habs = (d.habilidades || []).slice(0, 3);
+  return h('div', {
+    width: W, height: H, backgroundColor: COLORES.manteca, flexDirection: 'column', alignItems: 'center',
+    padding: '64px 64px 56px', color: COLORES.violeta, fontFamily: 'Lexend', position: 'relative',
+  },
+    capaSvg([
+      mancha(1070, 560, 230, [1, 0.85, 1.1, 0.95, 1.2, 0.9, 1, 0.8], '#FFF7D6'),
+      mancha(0, 420, 200, [1.1, 0.9, 1, 1.15, 0.85, 1, 0.9, 1.05], '#FFF7D6'),
+      iconoSvg('chispa', 110, 110, 30, COLORES.lavanda, 0),
+      iconoSvg('corazon', 940, 150, 28, '#F2B8A0', 12),
+      iconoSvg('estrella', 960, 800, 26, '#8CCFC6', -8),
+    ]),
+    h('div', {
+      fontFamily: 'Playfair Display', fontWeight: 800, fontSize: d.nombre.length > 16 ? 72 : 88, lineHeight: 1.02,
+      textTransform: 'uppercase', textAlign: 'center', justifyContent: 'center', letterSpacing: 1,
+    }, d.nombre),
+    (d.bajada || d.gancho) ? h('div', {
+      marginTop: 14, fontFamily: 'Playfair Display', fontStyle: 'italic', fontSize: 40, color: '#7A6BA8',
+      textAlign: 'center', justifyContent: 'center', maxWidth: 880,
+    }, d.gancho || d.bajada) : null,
+    d.edad ? h('div', { marginTop: 18 }, pastilla(d.edad, { fondo: COLORES.lavanda, color: COLORES.blanco, tam: 26, peso: 600, padY: 10 })) : null,
+    h('div', { flexGrow: 1, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
+      fotoProducto(foto, { ancho: 700, alto: 500, recortada: false, rot: -2 })),
+    h('div', { width: '100%', alignItems: 'flex-end', gap: 20 },
+      h('div', {
+        flexGrow: 1, flexDirection: 'column', backgroundColor: COLORES.blanco, borderRadius: 32, padding: '26px 32px',
+        boxShadow: '0 10px 30px rgba(82,72,108,0.10)',
+      },
+        h('div', { fontSize: 24, fontWeight: 600, letterSpacing: 4, color: COLORES.lavanda }, '¿QUÉ DESARROLLA?'),
+        h('div', { flexDirection: 'column', gap: 12, marginTop: 14 },
+          habs.map((hab, i) => {
+            const e = ESTILO_HABILIDAD[i % ESTILO_HABILIDAD.length];
+            return h('div', { alignItems: 'center', gap: 16 },
+              h('div', { width: 52, height: 52, borderRadius: 52, backgroundColor: e.fondo, alignItems: 'center', justifyContent: 'center' }, icono(e.icono, 26, e.color)),
+              h('div', { fontSize: 32, fontWeight: 600 }, hab.nombre));
+          })),
+      ),
+      logoConAro(120),
+    ),
+  );
+}
+
+// Institucional: frase de la marca, texto y datos del local
+// d: { frase, texto }
+async function institucional(d) {
+  return h('div', {
+    width: W, height: H, backgroundColor: COLORES.violeta, flexDirection: 'column',
+    padding: '96px 84px 64px', color: COLORES.blanco, fontFamily: 'Lexend', position: 'relative',
+  },
+    capaSvg([
+      mancha(1080, 60, 280, [1, 0.85, 1.1, 0.95, 1.2, 0.9, 1, 0.8], '#5E5379'),
+      mancha(0, 1330, 300, [1.1, 0.9, 1, 1.15, 0.85, 1, 0.9, 1.05], '#5E5379'),
+      iconoSvg('chispa', 940, 380, 32, COLORES.manteca, 0),
+      iconoSvg('estrella', 180, 1020, 26, COLORES.menta, 10),
+      iconoSvg('corazon', 900, 1000, 26, COLORES.durazno, -8),
+    ]),
+    h('div', { flexGrow: 1 }),
+    h('div', { fontFamily: 'Playfair Display', fontWeight: 700, fontSize: 220, lineHeight: 0.8, color: COLORES.manteca, opacity: 0.5, height: 130 }, '“'),
+    h('div', {
+      fontFamily: 'Playfair Display', fontStyle: 'italic', fontWeight: 400, fontSize: d.frase.length > 60 ? 76 : 92,
+      lineHeight: 1.15, color: COLORES.manteca, maxWidth: 900, marginTop: 10,
+    }, d.frase),
+    d.texto ? h('div', { marginTop: 48, fontSize: 34, lineHeight: 1.5, maxWidth: 860, opacity: 0.95 }, d.texto) : null,
+    h('div', { flexGrow: 1 }),
+    h('div', { justifyContent: 'space-between', alignItems: 'flex-end' },
+      h('div', { flexDirection: 'column', gap: 14, paddingBottom: 10 },
+        lineaIcono('pin', DIRECCION_LOCAL, COLORES.menta, 30),
+        h('div', { fontSize: 30, fontWeight: 600, color: COLORES.menta }, USUARIO_IG)),
+      logoConAro(140),
+    ),
+  );
+}
+
+// Fecha especial (Día de la Madre, de las Infancias, Navidad...): arriba durazno con corazones, fecha y
+// saludo; abajo blanco con mensaje, horario y dirección
+// d: { fecha, saludo, mensaje, horario? }
+async function festivo(d) {
+  const corazones = [
+    [90, 120, 46, COLORES.blanco, -12], [930, 90, 40, '#F2B8A0', 10], [180, 470, 34, '#E48F6E', 8],
+    [880, 430, 52, COLORES.blanco, -6], [520, 70, 28, '#E48F6E', 0], [60, 300, 26, '#F2B8A0', 14],
+    [990, 300, 30, COLORES.blanco, -14],
+  ].map(([x, y, t, c, r]) => iconoSvg('corazon', x, y, t, c, r));
+  const onda = { type: 'path', props: { d: 'M0 640 C180 700 360 700 540 660 C720 620 900 610 1080 660 L1080 1350 L0 1350 Z', fill: COLORES.blanco } };
+  return h('div', {
+    width: W, height: H, backgroundColor: COLORES.durazno, flexDirection: 'column', alignItems: 'center',
+    padding: '0 80px 56px', color: COLORES.violeta, fontFamily: 'Lexend', position: 'relative',
+  },
+    capaSvg([...corazones, onda]),
+    // Mitad de arriba
+    h('div', { height: 640, flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
+      pastilla(d.fecha, { fondo: COLORES.blanco, color: COLORES.violeta, tam: 28, peso: 600, padY: 12, padX: 30 }),
+      h('div', {
+        marginTop: 30, fontFamily: 'Playfair Display', fontStyle: 'italic', fontWeight: 700, fontSize: d.saludo.length > 22 ? 92 : 112,
+        lineHeight: 1.05, textAlign: 'center', justifyContent: 'center', maxWidth: 900,
+      }, d.saludo),
+    ),
+    // Mitad de abajo
+    h('div', { flexGrow: 1, flexDirection: 'column', alignItems: 'center', width: '100%', paddingTop: 60 },
+      h('div', { fontSize: 36, lineHeight: 1.5, textAlign: 'center', justifyContent: 'center', maxWidth: 860 }, d.mensaje),
+      d.horario ? h('div', { marginTop: 36 },
+        pastilla(d.horario, { fondo: COLORES.manteca, color: COLORES.violeta, tam: 28, peso: 600, padY: 14, padX: 30 })) : null,
+      h('div', { flexGrow: 1 }),
+      h('div', { width: '100%', justifyContent: 'space-between', alignItems: 'flex-end' },
+        h('div', { flexDirection: 'column', gap: 12, paddingBottom: 12 },
+          lineaIcono('pin', DIRECCION_LOCAL, COLORES.violeta, 28),
+          h('div', { fontSize: 28, fontWeight: 600, color: COLORES.lavanda }, USUARIO_IG)),
+        logoConAro(120, COLORES.durazno),
+      ),
+    ),
+  );
+}
+
 // --- HTML editable ---
 //
 // Cada slide se guarda como HTML con estilos en línea: es lo que Claude edita en el chat.
@@ -623,6 +797,10 @@ const PLANTILLAS = {
   unico_detalle: unicoDetalle,
   unico_desarrolla: unicoDesarrolla,
   cierre,
+  multi_portada: multiPortada,
+  producto_imagen: productoImagen,
+  institucional,
+  festivo,
 };
 
 async function htmlDePlantilla(plantilla, datos) {
