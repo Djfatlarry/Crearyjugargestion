@@ -301,7 +301,8 @@ app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
       }
     }
 
-    await sb('PATCH', `proveedores?id=eq.${id}`, { body: { tiendanube_product_id: creado.id, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+    const varianteId = creado.variants && creado.variants[0] ? creado.variants[0].id : null;
+    await sb('PATCH', `proveedores?id=eq.${id}`, { body: { tiendanube_product_id: creado.id, tiendanube_variant_id: varianteId, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
 
     ok(res, { tiendanube_product_id: creado.id, fotos_subidas: fotosSubidas, fotos_total: (prod.imagenes||[]).length, foto_error: fotosError });
   } catch (e) { err(res, e.message); }
@@ -359,6 +360,55 @@ app.post('/proveedores/:id/sync-foto-tiendanube', async (req, res) => {
     }
 
     ok(res, { fotos_subidas: fotosSubidas, fotos_total: prod.imagenes.length });
+  } catch (e) { err(res, e.message); }
+});
+
+// Sincroniza el stock de TODOS los productos publicados con Tiendanube:
+// - Si un producto publicado quedó en 0 de stock, lo da de baja (lo borra de Tiendanube).
+// - Si tiene stock, le actualiza el número real en Tiendanube.
+app.post('/tiendanube/sincronizar-stock', async (req, res) => {
+  try {
+    if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
+
+    const publicados = await sb('GET', 'proveedores', {
+      filter: 'tiendanube_product_id=not.is.null',
+      select: 'id,nombre,stock,tiendanube_product_id,tiendanube_variant_id',
+      limit: 2000,
+    });
+
+    const resultado = { dados_de_baja: [], stock_actualizado: [], errores: [] };
+
+    for (const p of (publicados || [])) {
+      try {
+        if (!p.stock || p.stock <= 0) {
+          // Sin stock: se da de baja
+          try {
+            await tn('DELETE', `/products/${p.tiendanube_product_id}`);
+          } catch (delErr) {
+            if (!/404/.test(delErr.message)) throw delErr;
+          }
+          await sb('PATCH', `proveedores?id=eq.${p.id}`, { body: { tiendanube_product_id: null, tiendanube_variant_id: null, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+          resultado.dados_de_baja.push({ id: p.id, nombre: p.nombre });
+        } else {
+          // Con stock: se actualiza el número real
+          let varianteId = p.tiendanube_variant_id;
+          if (!varianteId) {
+            const producto = await tn('GET', `/products/${p.tiendanube_product_id}`);
+            varianteId = producto?.variants?.[0]?.id || null;
+            if (varianteId) {
+              await sb('PATCH', `proveedores?id=eq.${p.id}`, { body: { tiendanube_variant_id: varianteId }, prefer: 'return=minimal' });
+            }
+          }
+          if (!varianteId) throw new Error('No se encontró la variante en Tiendanube');
+          await tn('PUT', `/products/${p.tiendanube_product_id}/variants/${varianteId}`, { stock: p.stock });
+          resultado.stock_actualizado.push({ id: p.id, nombre: p.nombre, stock: p.stock });
+        }
+      } catch (itemErr) {
+        resultado.errores.push({ id: p.id, nombre: p.nombre, error: itemErr.message });
+      }
+    }
+
+    ok(res, resultado);
   } catch (e) { err(res, e.message); }
 });
 
