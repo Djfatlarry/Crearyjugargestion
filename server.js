@@ -247,12 +247,84 @@ app.get('/tiendanube/categorias', async (_, res) => {
   } catch (e) { err(res, e.message); }
 });
 
+// ─── CATEGORÍAS POR EDAD ─────────────────────────────────────────────────────
+const CATEGORIA_PADRE_EDAD = 'Por edad';
+const GRUPOS_EDAD = { '0-2': '0 a 2 años', '3-5': '3 a 5 años', '6-8': '6 a 8 años', '9-12': '9 a 12 años', 'adolescentes': 'Adolescentes' };
+const nombreCategoriaTn = (c) => (c && c.name && (c.name.es || Object.values(c.name)[0])) || (typeof c?.name === 'string' ? c.name : '') || '';
+
+// Devuelve los ids de las categorías de edad que existen en Tiendanube para los grupos pedidos
+function idsCategoriasEdad(cats, grupos) {
+  const ids = [], faltantes = [];
+  for (const g of (grupos || [])) {
+    const nombre = GRUPOS_EDAD[g];
+    if (!nombre) continue;
+    const cat = cats.find(x => nombreCategoriaTn(x).trim().toLowerCase() === nombre.toLowerCase());
+    if (cat) ids.push(cat.id); else faltantes.push(nombre);
+  }
+  return { ids, faltantes };
+}
+
+// Crea (si no existen) la categoría "Por edad" y sus 5 subcategorías en Tiendanube. Se puede apretar más de una vez.
+app.post('/tiendanube/crear-categorias-edad', async (_, res) => {
+  try {
+    if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
+    let cats = (await tn('GET', '/categories?per_page=200')) || [];
+    const creadas = [], yaExistian = [];
+
+    let padre = cats.find(x => nombreCategoriaTn(x).trim().toLowerCase() === CATEGORIA_PADRE_EDAD.toLowerCase());
+    if (!padre) {
+      padre = await tn('POST', '/categories', { name: { es: CATEGORIA_PADRE_EDAD } });
+      creadas.push(CATEGORIA_PADRE_EDAD);
+    } else yaExistian.push(CATEGORIA_PADRE_EDAD);
+
+    for (const nombre of Object.values(GRUPOS_EDAD)) {
+      const existe = cats.find(x => nombreCategoriaTn(x).trim().toLowerCase() === nombre.toLowerCase());
+      if (existe) { yaExistian.push(nombre); continue; }
+      await tn('POST', '/categories', { name: { es: nombre }, parent: padre.id });
+      creadas.push(nombre);
+    }
+    ok(res, { creadas, ya_existian: yaExistian });
+  } catch (e) { err(res, e.message); }
+});
+
+// Suma las categorías de edad a los productos que YA están publicados (sin sacarles las que ya tienen).
+app.post('/tiendanube/aplicar-edades', async (_, res) => {
+  try {
+    if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
+    const cats = (await tn('GET', '/categories?per_page=200')) || [];
+    const publicados = await sb('GET', 'proveedores', {
+      filter: 'tiendanube_product_id=not.is.null',
+      select: 'id,nombre,edad_grupos,tiendanube_product_id',
+      limit: 2000,
+    });
+    const resultado = { actualizados: [], sin_edad: [], categorias_faltantes: [], errores: [] };
+    for (const p of (publicados || [])) {
+      try {
+        const grupos = Array.isArray(p.edad_grupos) ? p.edad_grupos : [];
+        if (!grupos.length) { resultado.sin_edad.push(p.nombre); continue; }
+        const { ids, faltantes } = idsCategoriasEdad(cats, grupos);
+        faltantes.forEach(f => { if (!resultado.categorias_faltantes.includes(f)) resultado.categorias_faltantes.push(f); });
+        if (!ids.length) continue;
+        const prod = await tn('GET', `/products/${p.tiendanube_product_id}`);
+        const actuales = (prod?.categories || []).map(x => (typeof x === 'object' ? x.id : x));
+        const nuevas = [...new Set([...actuales, ...ids])];
+        if (nuevas.length === actuales.length) continue; // ya las tenía
+        await tn('PUT', `/products/${p.tiendanube_product_id}`, { categories: nuevas });
+        resultado.actualizados.push(p.nombre);
+      } catch (itemErr) {
+        resultado.errores.push({ nombre: p.nombre, error: itemErr.message });
+      }
+    }
+    ok(res, resultado);
+  } catch (e) { err(res, e.message); }
+});
+
 // Publica un producto del catálogo como producto nuevo en Tiendanube
 app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
   try {
     if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
     const { id } = req.params;
-    const { categoria_id, stock, descripcion, peso, ancho, alto, profundidad, tags } = req.body;
+    const { categoria_id, stock, descripcion, peso, ancho, alto, profundidad, tags, edad_min, edad_max, edad_grupos } = req.body;
     if (!categoria_id) return err(res, 'Falta elegir la categoría', 400);
     if (stock === undefined || stock === null || stock === '') return err(res, 'Falta el stock inicial', 400);
     if (!descripcion || !descripcion.trim()) return err(res, 'Falta la descripción', 400);
@@ -275,9 +347,20 @@ app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
     if (alto !== undefined && alto !== null && alto !== '') variant.height = String(alto);
     if (profundidad !== undefined && profundidad !== null && profundidad !== '') variant.depth = String(profundidad);
 
+    // Categorías: la principal + las de edad (si existen en Tiendanube)
+    const categoriasIds = [Number(categoria_id)];
+    let edadesSinCategoria = [];
+    const gruposEdad = Array.isArray(edad_grupos) ? edad_grupos : [];
+    if (gruposEdad.length) {
+      const catsTn = (await tn('GET', '/categories?per_page=200')) || [];
+      const { ids, faltantes } = idsCategoriasEdad(catsTn, gruposEdad);
+      ids.forEach(i => { if (!categoriasIds.includes(i)) categoriasIds.push(i); });
+      edadesSinCategoria = faltantes;
+    }
+
     const payload = {
       name: { es: prod.nombre },
-      categories: [Number(categoria_id)],
+      categories: categoriasIds,
       description: { es: descripcion },
       variants: [variant],
     };
@@ -302,9 +385,13 @@ app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
     }
 
     const varianteId = creado.variants && creado.variants[0] ? creado.variants[0].id : null;
-    await sb('PATCH', `proveedores?id=eq.${id}`, { body: { tiendanube_product_id: creado.id, tiendanube_variant_id: varianteId, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+    const cambiosLocales = { tiendanube_product_id: creado.id, tiendanube_variant_id: varianteId, updated_at: new Date().toISOString() };
+    if (edad_min !== undefined && edad_min !== null && edad_min !== '') cambiosLocales.edad_min = Number(edad_min);
+    if (edad_max !== undefined && edad_max !== null && edad_max !== '') cambiosLocales.edad_max = Number(edad_max);
+    if (gruposEdad.length) cambiosLocales.edad_grupos = gruposEdad;
+    await sb('PATCH', `proveedores?id=eq.${id}`, { body: cambiosLocales, prefer: 'return=minimal' });
 
-    ok(res, { tiendanube_product_id: creado.id, fotos_subidas: fotosSubidas, fotos_total: (prod.imagenes||[]).length, foto_error: fotosError });
+    ok(res, { tiendanube_product_id: creado.id, fotos_subidas: fotosSubidas, fotos_total: (prod.imagenes||[]).length, foto_error: fotosError, edades_sin_categoria: edadesSinCategoria });
   } catch (e) { err(res, e.message); }
 });
 
