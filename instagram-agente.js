@@ -217,6 +217,7 @@ const SLIDES_UNICO = { portada: 'unico_portada', detalle: 'unico_detalle', desar
 const SLIDES_UNICO_DEFAULT = ['portada', 'detalle', 'desarrolla', 'cierre'];
 // Sonnet 5: buen equilibrio entre calidad de diseño y costo por mensaje (Opus 5 es más fino y ~2,5x más caro)
 const MODELO_DISENO = 'claude-sonnet-5';
+const TEMAS_UNICO = ['panel', 'color', 'crema'];
 
 async function buscarProducto(sb, id) {
   const r = await sb('GET', 'proveedores', { select: 'id,nombre,descripcion,categoria,categoria_grande,proveedor,stock,imagenes', filter: `id=eq.${encodeURIComponent(id)}` });
@@ -395,7 +396,7 @@ async function htmlSlidesMulti(contenido, productosPorId) {
   for (const [i, p] of prods.entries()) {
     html.push(await htmlDePlantilla('producto', {
       nombre: p.nombre, edad: p.edad, frase: p.frase, habilidades: p.habilidades,
-      foto: imagenesDe(productosPorId[p.id])[0], indice: i + 2, total,
+      foto: imagenesDe(productosPorId[p.id])[0], indice: i + 2, total, desplazamiento: contenido.desplazamiento || 0,
     }));
   }
   html.push(await htmlDePlantilla('cierre', { indice: total, total }));
@@ -594,6 +595,38 @@ Pedido: ${mensaje}`,
     prefer: 'return=representation',
   });
   return { borrador: actualizado, respuesta };
+}
+
+// Cambio de colores sin IA: se vuelve a armar el diseño desde las plantillas con otros colores.
+// Carrusel de un producto: tema panel / color / crema. Varios productos: rota los fondos de las slides.
+// Ojo: si el diseño se había cambiado por chat, esos cambios de diseño se reemplazan (quedan en deshacer).
+async function cambiarColores(sb, borrador, tema) {
+  const contenido = { ...(borrador.contenido || {}) };
+  let html;
+  let nuevoTema = borrador.tema;
+  if (borrador.tipo === 'unico' && !contenido.plantilla) {
+    if (!TEMAS_UNICO.includes(tema)) throw new Error('Colores inválidos');
+    const producto = await buscarProducto(sb, borrador.producto_ids?.[0]);
+    if (!producto) throw new Error('El producto de este borrador ya no existe');
+    html = await htmlSlidesUnico(producto, contenido, tema);
+    nuevoTema = tema;
+  } else if (borrador.tipo === 'multi') {
+    const productos = (await Promise.all(borrador.producto_ids.map((id) => buscarProducto(sb, id)))).filter(Boolean);
+    const porId = Object.fromEntries(productos.map((p) => [p.id, p]));
+    contenido.productos = (contenido.productos || []).filter((p) => porId[p.id]);
+    if (!contenido.productos.length) throw new Error('Los productos de este borrador ya no existen');
+    contenido.desplazamiento = ((contenido.desplazamiento || 0) + 1) % 4;
+    html = await htmlSlidesMulti(contenido, porId);
+  } else {
+    throw new Error('Este tipo de publicación no tiene variantes de color');
+  }
+  const versiones = [...(contenido.versiones || []), { html_slides: contenido.html_slides, slides: borrador.slides, caption: borrador.caption, fecha: new Date().toISOString() }].slice(-15);
+  const slides = await renderizarYSubir(html);
+  const [actualizado] = await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(borrador.id)}`, {
+    body: { tema: nuevoTema, slides, estado: 'borrador', updated_at: new Date().toISOString(), contenido: { ...contenido, html_slides: html, versiones } },
+    prefer: 'return=representation',
+  });
+  return actualizado;
 }
 
 async function deshacerBorrador(sb, borrador) {
@@ -982,6 +1015,19 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
       if (!b) return err(res, 'Borrador no encontrado', 404);
       if (b.estado === 'publicado') return err(res, 'Ya está publicado, no se puede modificar', 400);
       ok(res, await editarBorrador(sb, llamarClaude, b, mensaje));
+    } catch (e) { err(res, e.message); }
+    finally { estado.generando = false; }
+  });
+
+  // Cambiar colores sin usar IA: { tema: 'panel' | 'color' | 'crema' } (en varios productos, rota los fondos)
+  app.post('/instagram/borradores/:id/colores', requiereClave, async (req, res) => {
+    if (estado.generando) return err(res, 'Hay otra publicación procesándose, probá en un rato', 409);
+    estado.generando = true;
+    try {
+      const b = await buscarBorrador(req.params.id);
+      if (!b) return err(res, 'Borrador no encontrado', 404);
+      if (b.estado === 'publicado') return err(res, 'Ya está publicado, no se puede modificar', 400);
+      ok(res, { borrador: await cambiarColores(sb, b, req.body?.tema) });
     } catch (e) { err(res, e.message); }
     finally { estado.generando = false; }
   });

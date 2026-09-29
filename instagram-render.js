@@ -148,7 +148,8 @@ function pastilla(texto, { fondo, color, tam = 28, peso = 500, padX = 28, padY =
 // }
 async function slideProducto(datos) {
   const { nombre, frase, edad, habilidades = [], indice = 1, total = 1 } = datos;
-  const fondo = datos.fondo || FONDOS_PRODUCTO[(indice - 1) % FONDOS_PRODUCTO.length];
+  // desplazamiento: permite rotar la secuencia de fondos (botón "Cambiar colores", sin usar IA)
+  const fondo = datos.fondo || FONDOS_PRODUCTO[(indice - 1 + (datos.desplazamiento || 0)) % FONDOS_PRODUCTO.length];
   const esBlanco = fondo === COLORES.blanco;
   const foto = refImagen(datos.foto);
 
