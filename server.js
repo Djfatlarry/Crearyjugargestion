@@ -247,85 +247,51 @@ app.get('/tiendanube/categorias', async (_, res) => {
   } catch (e) { err(res, e.message); }
 });
 
-// ─── CATEGORÍAS POR EDAD ─────────────────────────────────────────────────────
+// ─── HELPERS: CATEGORÍAS Y DESCRIPCIONES ─────────────────────────────────────
 const CATEGORIA_PADRE_EDAD = 'Por edad';
 const GRUPOS_EDAD = { '0-2': '0 a 2 años', '3-5': '3 a 5 años', '6-8': '6 a 8 años', '9-12': '9 a 12 años', 'adolescentes': 'Adolescentes' };
 const nombreCategoriaTn = (c) => (c && c.name && (c.name.es || Object.values(c.name)[0])) || (typeof c?.name === 'string' ? c.name : '') || '';
+const normTxt = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+const NOMBRES_EDAD_NORM = [CATEGORIA_PADRE_EDAD, ...Object.values(GRUPOS_EDAD)].map(normTxt);
 
-// Devuelve los ids de las categorías de edad que existen en Tiendanube para los grupos pedidos
+// Ids de las categorías de edad que existen en Tiendanube para los grupos pedidos
 function idsCategoriasEdad(cats, grupos) {
   const ids = [], faltantes = [];
   for (const g of (grupos || [])) {
     const nombre = GRUPOS_EDAD[g];
     if (!nombre) continue;
-    const cat = cats.find(x => nombreCategoriaTn(x).trim().toLowerCase() === nombre.toLowerCase());
+    const cat = cats.find(x => normTxt(nombreCategoriaTn(x)) === normTxt(nombre));
     if (cat) ids.push(cat.id); else faltantes.push(nombre);
   }
   return { ids, faltantes };
 }
-
-// Crea (si no existen) la categoría "Por edad" y sus 5 subcategorías en Tiendanube. Se puede apretar más de una vez.
-app.post('/tiendanube/crear-categorias-edad', async (_, res) => {
-  try {
-    if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
-    let cats = (await tn('GET', '/categories?per_page=200')) || [];
-    const creadas = [], yaExistian = [];
-
-    let padre = cats.find(x => nombreCategoriaTn(x).trim().toLowerCase() === CATEGORIA_PADRE_EDAD.toLowerCase());
-    if (!padre) {
-      padre = await tn('POST', '/categories', { name: { es: CATEGORIA_PADRE_EDAD } });
-      creadas.push(CATEGORIA_PADRE_EDAD);
-    } else yaExistian.push(CATEGORIA_PADRE_EDAD);
-
-    for (const nombre of Object.values(GRUPOS_EDAD)) {
-      const existe = cats.find(x => nombreCategoriaTn(x).trim().toLowerCase() === nombre.toLowerCase());
-      if (existe) { yaExistian.push(nombre); continue; }
-      await tn('POST', '/categories', { name: { es: nombre }, parent: padre.id });
-      creadas.push(nombre);
-    }
-    ok(res, { creadas, ya_existian: yaExistian });
-  } catch (e) { err(res, e.message); }
-});
-
-// Suma las categorías de edad a los productos que YA están publicados (sin sacarles las que ya tienen).
-app.post('/tiendanube/aplicar-edades', async (_, res) => {
-  try {
-    if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
-    const cats = (await tn('GET', '/categories?per_page=200')) || [];
-    const publicados = await sb('GET', 'proveedores', {
-      filter: 'tiendanube_product_id=not.is.null',
-      select: 'id,nombre,edad_grupos,tiendanube_product_id',
-      limit: 2000,
-    });
-    const resultado = { actualizados: [], sin_edad: [], categorias_faltantes: [], errores: [] };
-    for (const p of (publicados || [])) {
-      try {
-        const grupos = Array.isArray(p.edad_grupos) ? p.edad_grupos : [];
-        if (!grupos.length) { resultado.sin_edad.push(p.nombre); continue; }
-        const { ids, faltantes } = idsCategoriasEdad(cats, grupos);
-        faltantes.forEach(f => { if (!resultado.categorias_faltantes.includes(f)) resultado.categorias_faltantes.push(f); });
-        if (!ids.length) continue;
-        const prod = await tn('GET', `/products/${p.tiendanube_product_id}`);
-        const actuales = (prod?.categories || []).map(x => (typeof x === 'object' ? x.id : x));
-        const nuevas = [...new Set([...actuales, ...ids])];
-        if (nuevas.length === actuales.length) continue; // ya las tenía
-        await tn('PUT', `/products/${p.tiendanube_product_id}`, { categories: nuevas });
-        resultado.actualizados.push(p.nombre);
-      } catch (itemErr) {
-        resultado.errores.push({ nombre: p.nombre, error: itemErr.message });
-      }
-    }
-    ok(res, resultado);
-  } catch (e) { err(res, e.message); }
-});
+// Id de una categoría "principal" a partir de su nombre (Educativos, Construcción, etc.)
+function idCategoriaPorNombre(cats, nombre) {
+  if (!nombre) return null;
+  const cat = cats.find(x => normTxt(nombreCategoriaTn(x)) === normTxt(nombre) && !NOMBRES_EDAD_NORM.includes(normTxt(nombreCategoriaTn(x))));
+  return cat ? cat.id : null;
+}
+// La descripción se guarda como texto con líneas "- " (o como HTML si se editó con formato). Tiendanube quiere HTML.
+function descripcionAHtml(texto) {
+  const t = String(texto || '').trim();
+  if (!t) return '';
+  if (/<\/?(p|ul|ol|li|b|strong|i|em|br|div|span)\b/i.test(t)) return t; // ya es HTML
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return t.split(/\n\s*\n/).map(bloque => {
+    const lineas = bloque.split('\n').map(l => l.trim()).filter(Boolean);
+    const items = lineas.filter(l => l.startsWith('- '));
+    if (items.length && items.length === lineas.length) return '<ul>' + items.map(l => '<li>' + esc(l.slice(2)) + '</li>').join('') + '</ul>';
+    return '<p>' + lineas.map(esc).join('<br>') + '</p>';
+  }).join('');
+}
 
 // Publica un producto del catálogo como producto nuevo en Tiendanube
 app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
   try {
     if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
     const { id } = req.params;
-    const { categoria_id, stock, descripcion, peso, ancho, alto, profundidad, tags, edad_min, edad_max, edad_grupos } = req.body;
-    if (!categoria_id) return err(res, 'Falta elegir la categoría', 400);
+    const { categoria_id, categoria, stock, descripcion, peso, ancho, alto, profundidad, tags, edad_min, edad_max, edad_grupos } = req.body;
+    if (!categoria_id && !categoria) return err(res, 'Falta elegir la categoría', 400);
     if (stock === undefined || stock === null || stock === '') return err(res, 'Falta el stock inicial', 400);
     if (!descripcion || !descripcion.trim()) return err(res, 'Falta la descripción', 400);
 
@@ -347,12 +313,14 @@ app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
     if (alto !== undefined && alto !== null && alto !== '') variant.height = String(alto);
     if (profundidad !== undefined && profundidad !== null && profundidad !== '') variant.depth = String(profundidad);
 
-    // Categorías: la principal + las de edad (si existen en Tiendanube)
-    const categoriasIds = [Number(categoria_id)];
+    // Categorías: la principal (por id o por nombre) + las de edad (si existen en Tiendanube)
+    const catsTn = (await tn('GET', '/categories?per_page=200')) || [];
+    const idPrincipal = categoria_id ? Number(categoria_id) : idCategoriaPorNombre(catsTn, categoria);
+    if (!idPrincipal) return err(res, `La categoría "${categoria}" no existe en Tiendanube`, 400);
+    const categoriasIds = [idPrincipal];
     let edadesSinCategoria = [];
     const gruposEdad = Array.isArray(edad_grupos) ? edad_grupos : [];
     if (gruposEdad.length) {
-      const catsTn = (await tn('GET', '/categories?per_page=200')) || [];
       const { ids, faltantes } = idsCategoriasEdad(catsTn, gruposEdad);
       ids.forEach(i => { if (!categoriasIds.includes(i)) categoriasIds.push(i); });
       edadesSinCategoria = faltantes;
@@ -389,6 +357,16 @@ app.post('/proveedores/:id/publicar-tiendanube', async (req, res) => {
     if (edad_min !== undefined && edad_min !== null && edad_min !== '') cambiosLocales.edad_min = Number(edad_min);
     if (edad_max !== undefined && edad_max !== null && edad_max !== '') cambiosLocales.edad_max = Number(edad_max);
     if (gruposEdad.length) cambiosLocales.edad_grupos = gruposEdad;
+    // Guardamos en la app lo mismo que se publicó, para que ambos lados queden iguales
+    cambiosLocales.descripcion = descripcion;
+    cambiosLocales.stock = Number(stock);
+    cambiosLocales.tn_pendiente_texto = false;
+    if (categoria) cambiosLocales.categoria_sugerida = categoria;
+    if (tags && tags.trim()) cambiosLocales.tags = tags.trim();
+    if (peso !== undefined && peso !== null && peso !== '') cambiosLocales.peso = Number(peso);
+    if (ancho !== undefined && ancho !== null && ancho !== '') cambiosLocales.ancho = Number(ancho);
+    if (alto !== undefined && alto !== null && alto !== '') cambiosLocales.alto = Number(alto);
+    if (profundidad !== undefined && profundidad !== null && profundidad !== '') cambiosLocales.profundidad = Number(profundidad);
     await sb('PATCH', `proveedores?id=eq.${id}`, { body: cambiosLocales, prefer: 'return=minimal' });
 
     ok(res, { tiendanube_product_id: creado.id, fotos_subidas: fotosSubidas, fotos_total: (prod.imagenes||[]).length, foto_error: fotosError, edades_sin_categoria: edadesSinCategoria });
@@ -450,52 +428,124 @@ app.post('/proveedores/:id/sync-foto-tiendanube', async (req, res) => {
   } catch (e) { err(res, e.message); }
 });
 
-// Sincroniza el stock de TODOS los productos publicados con Tiendanube:
-// - Si un producto publicado quedó en 0 de stock, lo da de baja (lo borra de Tiendanube).
-// - Si tiene stock, le actualiza el número real en Tiendanube.
-app.post('/tiendanube/sincronizar-stock', async (req, res) => {
+// ─── ACTUALIZAR TIENDANUBE (todo lo que cambió en la app) ────────────────────
+// Lista de ids de productos publicados (el navegador los procesa de a tandas chicas).
+app.get('/tiendanube/publicados-ids', async (_, res) => {
+  try {
+    const d = await sb('GET', 'proveedores', { filter: 'tiendanube_product_id=not.is.null', select: 'id', order: 'id.asc', limit: 5000 });
+    ok(res, { ids: (d || []).map(x => x.id) });
+  } catch (e) { err(res, e.message); }
+});
+
+const iguales = (a, b) => Math.abs(Number(a) - Number(b)) < 0.005;
+
+// Compara un producto de la app contra Tiendanube y (si dryRun es false) aplica las diferencias.
+// - Precio, stock, medidas y categorías: siempre.
+// - Nombre y descripción: solo si se editaron en la app (tn_pendiente_texto), para no pisar los textos que ya tenés en la tienda.
+// - Sin stock: se da de baja.
+async function actualizarProductoTn(p, catsTn, dryRun) {
+  const out = { id: p.id, nombre: p.nombre, cambios: [], sospechoso: [], baja: false, error: null };
+
+  if (!p.stock || Number(p.stock) <= 0) {
+    out.baja = true; out.cambios.push('dar de baja (sin stock)');
+    if (!dryRun) {
+      try { await tn('DELETE', `/products/${p.tiendanube_product_id}`); }
+      catch (e) { if (!/404/.test(e.message)) throw e; }
+      await sb('PATCH', `proveedores?id=eq.${p.id}`, { body: { tiendanube_product_id: null, tiendanube_variant_id: null, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+    }
+    return out;
+  }
+
+  let prod;
+  try { prod = await tn('GET', `/products/${p.tiendanube_product_id}`); }
+  catch (e) {
+    if (/404/.test(e.message)) {
+      out.error = 'ya no existe en Tiendanube (se limpia el vínculo)';
+      if (!dryRun) await sb('PATCH', `proveedores?id=eq.${p.id}`, { body: { tiendanube_product_id: null, tiendanube_variant_id: null }, prefer: 'return=minimal' });
+      return out;
+    }
+    throw e;
+  }
+  const variante = prod?.variants?.[0];
+  if (!variante) { out.error = 'el producto no tiene variante en Tiendanube'; return out; }
+
+  // Variante: precio, stock, medidas
+  const cambioVariante = {};
+  const precioApp = Number(p.precio_venta), precioTn = Number(variante.price);
+  if (precioApp > 0 && !iguales(precioApp, precioTn)) {
+    const ratio = precioTn > 0 ? precioApp / precioTn : 1;
+    if (ratio < 0.5 || ratio > 2) out.sospechoso.push(`precio: app $${precioApp} vs Tiendanube $${precioTn} (no se cambió, revisalo)`);
+    else { cambioVariante.price = String(precioApp); out.cambios.push(`precio $${precioTn} → $${precioApp}`); }
+  }
+  if (variante.stock === null || variante.stock === undefined || Number(variante.stock) !== Number(p.stock)) {
+    cambioVariante.stock = Number(p.stock); out.cambios.push(`stock ${variante.stock ?? 'sin límite'} → ${p.stock}`);
+  }
+  for (const [campoApp, campoTn, etiqueta] of [['peso', 'weight', 'peso'], ['ancho', 'width', 'ancho'], ['alto', 'height', 'alto'], ['profundidad', 'depth', 'profundidad']]) {
+    if (p[campoApp] !== null && p[campoApp] !== undefined && Number(p[campoApp]) > 0 && !iguales(p[campoApp], variante[campoTn] || 0)) {
+      cambioVariante[campoTn] = String(p[campoApp]); out.cambios.push(`${etiqueta} ${variante[campoTn] || '—'} → ${p[campoApp]}`);
+    }
+  }
+
+  // Producto: categorías, tags y (si se editaron en la app) nombre y descripción
+  const cambioProducto = {};
+  const existentes = (prod.categories || []).map(x => (typeof x === 'object' ? x.id : x));
+  const idsEdadTodos = new Set(catsTn.filter(x => NOMBRES_EDAD_NORM.includes(normTxt(nombreCategoriaTn(x)))).map(x => x.id));
+  const idPrincipal = idCategoriaPorNombre(catsTn, p.categoria_sugerida);
+  if (p.categoria_sugerida && !idPrincipal) out.sospechoso.push(`categoría "${p.categoria_sugerida}" no existe en Tiendanube (no se cambió)`);
+  const grupos = Array.isArray(p.edad_grupos) ? p.edad_grupos : [];
+  const { ids: idsEdad } = idsCategoriasEdad(catsTn, grupos);
+  const finales = [
+    ...(idPrincipal ? [idPrincipal] : existentes.filter(id => !idsEdadTodos.has(id))),
+    ...(idsEdad.length ? idsEdad : existentes.filter(id => idsEdadTodos.has(id))),
+  ];
+  const finalesUnicos = [...new Set(finales)];
+  if (finalesUnicos.length && (finalesUnicos.length !== existentes.length || finalesUnicos.some(id => !existentes.includes(id)))) {
+    cambioProducto.categories = finalesUnicos;
+    const nombreDe = (id) => nombreCategoriaTn(catsTn.find(x => x.id === id)) || id;
+    out.cambios.push(`categorías: ${existentes.map(nombreDe).join(', ') || '—'} → ${finalesUnicos.map(nombreDe).join(', ')}`);
+  }
+  if (p.tags && p.tags.trim()) {
+    const norm = (s) => String(s || '').split(',').map(x => x.trim()).filter(Boolean).sort().join(',');
+    if (norm(p.tags) !== norm(prod.tags)) { cambioProducto.tags = p.tags.trim(); out.cambios.push('tags'); }
+  }
+  if (p.tn_pendiente_texto) {
+    const nombreTn = prod.name?.es || '';
+    if (p.nombre && p.nombre.trim() !== nombreTn.trim()) { cambioProducto.name = { es: p.nombre.trim() }; out.cambios.push(`nombre → "${p.nombre.trim()}"`); }
+    const html = descripcionAHtml(p.descripcion);
+    if (html && html.trim() !== (prod.description?.es || '').trim()) { cambioProducto.description = { es: html }; out.cambios.push('descripción'); }
+  }
+
+  if (!dryRun) {
+    if (Object.keys(cambioVariante).length) await tn('PUT', `/products/${p.tiendanube_product_id}/variants/${variante.id}`, cambioVariante);
+    if (Object.keys(cambioProducto).length) await tn('PUT', `/products/${p.tiendanube_product_id}`, cambioProducto);
+    const local = { updated_at: new Date().toISOString() };
+    if (!p.tiendanube_variant_id) local.tiendanube_variant_id = variante.id;
+    if (p.tn_pendiente_texto) local.tn_pendiente_texto = false;
+    await sb('PATCH', `proveedores?id=eq.${p.id}`, { body: local, prefer: 'return=minimal' });
+  }
+  return out;
+}
+
+// Body: { ids: [...], dry_run: true|false }. Con dry_run solo informa qué cambiaría, sin tocar la tienda.
+app.post('/tiendanube/actualizar-productos', async (req, res) => {
   try {
     if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return err(res, 'Falta configurar TIENDANUBE_ACCESS_TOKEN o TIENDANUBE_STORE_ID en el servidor', 500);
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.slice(0, 40) : [];
+    const dryRun = !!req.body?.dry_run;
+    if (!ids.length) return ok(res, { resultados: [] });
 
-    const publicados = await sb('GET', 'proveedores', {
-      filter: 'tiendanube_product_id=not.is.null',
-      select: 'id,nombre,stock,tiendanube_product_id,tiendanube_variant_id',
-      limit: 2000,
+    const catsTn = (await tn('GET', '/categories?per_page=200')) || [];
+    const filas = await sb('GET', 'proveedores', {
+      filter: `id=in.(${ids.map(i => `"${i}"`).join(',')})&tiendanube_product_id=not.is.null`,
+      select: '*',
+      limit: 100,
     });
-
-    const resultado = { dados_de_baja: [], stock_actualizado: [], errores: [] };
-
-    for (const p of (publicados || [])) {
-      try {
-        if (!p.stock || p.stock <= 0) {
-          // Sin stock: se da de baja
-          try {
-            await tn('DELETE', `/products/${p.tiendanube_product_id}`);
-          } catch (delErr) {
-            if (!/404/.test(delErr.message)) throw delErr;
-          }
-          await sb('PATCH', `proveedores?id=eq.${p.id}`, { body: { tiendanube_product_id: null, tiendanube_variant_id: null, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
-          resultado.dados_de_baja.push({ id: p.id, nombre: p.nombre });
-        } else {
-          // Con stock: se actualiza el número real
-          let varianteId = p.tiendanube_variant_id;
-          if (!varianteId) {
-            const producto = await tn('GET', `/products/${p.tiendanube_product_id}`);
-            varianteId = producto?.variants?.[0]?.id || null;
-            if (varianteId) {
-              await sb('PATCH', `proveedores?id=eq.${p.id}`, { body: { tiendanube_variant_id: varianteId }, prefer: 'return=minimal' });
-            }
-          }
-          if (!varianteId) throw new Error('No se encontró la variante en Tiendanube');
-          await tn('PUT', `/products/${p.tiendanube_product_id}/variants/${varianteId}`, { stock: p.stock });
-          resultado.stock_actualizado.push({ id: p.id, nombre: p.nombre, stock: p.stock });
-        }
-      } catch (itemErr) {
-        resultado.errores.push({ id: p.id, nombre: p.nombre, error: itemErr.message });
-      }
+    const resultados = [];
+    for (const p of (filas || [])) {
+      try { resultados.push(await actualizarProductoTn(p, catsTn, dryRun)); }
+      catch (e) { resultados.push({ id: p.id, nombre: p.nombre, cambios: [], sospechoso: [], baja: false, error: e.message }); }
     }
-
-    ok(res, resultado);
+    ok(res, { resultados, dry_run: dryRun });
   } catch (e) { err(res, e.message); }
 });
 
