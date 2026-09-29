@@ -129,6 +129,12 @@ details.config .row{margin-top:12px;}
 .dia-row{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;flex-wrap:wrap;}
 .dia-row input[type=time],.dia-row select{width:auto;padding:6px 8px;}
 .dia-row input[type=checkbox]{width:auto;}
+.herramientas{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:-2px 0 14px;}
+.herramientas .btn{font-size:13px;padding:7px 12px;}
+.colores{display:inline-flex;background:var(--purple-light);border-radius:var(--radius-md);padding:3px;gap:2px;margin-left:auto;align-items:center;}
+.colores span{font-size:12.5px;font-weight:800;color:var(--purple-dark);padding:0 8px;}
+.colores button{border:none;background:none;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;color:var(--purple-dark);padding:6px 10px;border-radius:9px;cursor:pointer;}
+.colores button.activo{background:var(--purple-dark);color:#fff;}
 .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:14px;font-weight:700;padding:12px 18px;border-radius:var(--radius-md);opacity:0;transition:all .2s;pointer-events:none;max-width:calc(100% - 32px);text-align:center;z-index:10;}
@@ -343,6 +349,7 @@ function tarjeta(b){
       </div>
       ${fechaPub}
       <div class="slides">${slides}</div>
+      ${herramientas(b)}
       <div class="section-label">Texto del posteo</div>
       <textarea id="cap-${b.id}" ${editable ? '' : 'readonly'}>${esc(b.caption)}</textarea>
       ${b.error ? `<div class="error-box">Último error al publicar: ${esc(b.error)}</div>` : ''}
@@ -350,6 +357,38 @@ function tarjeta(b){
       ${b.estado === 'aprobado' && !agendaInfo.ig_conectado ? bloqueManual(b) : ''}
       ${editable ? chat(b) : ''}
     </div>`;
+}
+
+// Descargar / copiar (siempre) y cambio de colores sin usar IA
+function herramientas(b){
+  const editable = b.estado !== 'publicado';
+  let colores = '';
+  if(editable && b.tipo === 'unico' && !b.contenido?.plantilla){
+    colores = `<div class="colores"><span>Colores</span>${['panel','color','crema'].map(t =>
+      `<button class="${b.tema === t ? 'activo' : ''}" onclick="cambiarColores('${b.id}','${t}', this)">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div>`;
+  }else if(editable && b.tipo === 'multi'){
+    colores = `<div class="colores"><button onclick="cambiarColores('${b.id}','rotar', this)">🎨 Cambiar colores</button></div>`;
+  }
+  return `
+    <div class="herramientas">
+      <button class="btn btn-soft" onclick="descargar('${b.id}', this)">⬇ Descargar imágenes</button>
+      <button class="btn btn-soft" onclick="copiarTexto('${b.id}')">Copiar texto</button>
+      ${colores}
+    </div>`;
+}
+
+async function cambiarColores(id, tema, btn){
+  const b = borradores.find(x => x.id === id);
+  if(b.tipo === 'unico' && b.tema === tema) return;
+  const conChat = (b.contenido?.historial || []).some(h => h.mensaje !== '(deshacer)');
+  if(conChat && !confirm('Esto rearma el diseño con otros colores y reemplaza los cambios de diseño que hiciste por chat (los textos del chat también vuelven a los originales). Si no te gusta, podés deshacerlo. ¿Seguimos?')) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner oscuro"></span>';
+  try{
+    await api('POST', `/instagram/borradores/${id}/colores`, { tema });
+    toast('Colores cambiados');
+    await cargarBorradores();
+  }catch(e){ toast(e.message); await cargarBorradores(); }
 }
 
 function chat(b){
@@ -504,8 +543,6 @@ function bloqueManual(b){
       <div class="manual-tit">${vence ? '¡Es hora de publicarlo!' : 'Para publicarlo desde el celular'}</div>
       <div class="acciones">
         <button class="btn btn-primary" onclick="compartir('${b.id}', this)">Compartir en Instagram</button>
-        <button class="btn btn-soft" onclick="descargar('${b.id}', this)">Descargar imágenes</button>
-        <button class="btn btn-soft" onclick="copiarTexto('${b.id}')">Copiar texto</button>
         <button class="btn btn-good" onclick="marcarPublicado('${b.id}')">Ya lo publiqué</button>
       </div>
     </div>`;

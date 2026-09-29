@@ -116,6 +116,7 @@ El logo va en `assets/logo-crear-y-jugar.png`.
 - `PATCH /instagram/borradores/:id` — `{ "caption"?: "...", "estado"?: "aprobado" | "borrador" }`
 - `DELETE /instagram/borradores/:id`
 - `POST /instagram/borradores/:id/editar` — `{ "mensaje": "..." }` chat libre con Claude sobre el diseño (ve las slides y edita su HTML)
+- `POST /instagram/borradores/:id/colores` — `{ "tema": "panel" | "color" | "crema" }` cambia los colores sin usar IA (en varios productos rota los fondos)
 - `POST /instagram/borradores/:id/deshacer` — vuelve a la versión anterior
 - `POST /instagram/borradores/:id/guardar-plantilla` — `{ "nombre": "..." }` guarda el diseño como plantilla reutilizable
 - `GET /instagram/plantillas`, `DELETE /instagram/plantillas/:id`
