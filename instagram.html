@@ -135,6 +135,9 @@ details.config .row{margin-top:12px;}
 .colores span{font-size:12.5px;font-weight:800;color:var(--purple-dark);padding:0 8px;}
 .colores button{border:none;background:none;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;color:var(--purple-dark);padding:6px 10px;border-radius:9px;cursor:pointer;}
 .colores button.activo{background:var(--purple-dark);color:#fff;}
+.fb-box{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);font-size:13.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.fb-box .btn{font-size:13px;padding:6px 12px;}
+.fb-box > div{width:100%;}
 .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:14px;font-weight:700;padding:12px 18px;border-radius:var(--radius-md);opacity:0;transition:all .2s;pointer-events:none;max-width:calc(100% - 32px);text-align:center;z-index:10;}
@@ -336,7 +339,12 @@ function tarjeta(b){
   const fechaPub = editable
     ? `<div class="fecha-pub">📅 Publicar el <select onchange="cambiarFecha('${b.id}', this)">${opcionesFecha(b)}</select></div>`
     : '';
-  const meta = b.estado === 'publicado' ? `Publicado ${fecha(b.publicado_at)}` : `Generado ${fecha(b.created_at)}`;
+  const meta = b.estado === 'publicado'
+    ? `Publicado ${fecha(b.publicado_at)}${b.fb_post_id ? ' · también en Facebook' : ''}`
+    : `Generado ${fecha(b.created_at)}`;
+  if(b.estado === 'publicado' && !b.fb_post_id && agendaInfo.fb?.activo){
+    acciones = `<button class="btn btn-soft" onclick="publicarFacebook('${b.id}', this)">Publicar también en Facebook</button>`;
+  }
   return `
     <div class="card" id="b-${b.id}">
       <div class="borrador-head">
@@ -649,6 +657,7 @@ function renderCalendario(){
         <button class="btn btn-soft" onclick="probarConexion(this)">Probar conexión con Instagram</button>
       </div>
       <div id="estado-ig" class="muted" style="margin-top:8px;">${estadoConexion}</div>
+      ${seccionFacebook()}
       <div id="editor-agenda"></div>
     </div>
     ${dias || '<div class="card vacio"><p class="muted">No hay nada en los próximos días.</p></div>'}`;
@@ -656,6 +665,70 @@ function renderCalendario(){
 
 // Resultado de la última prueba de conexión (se mantiene aunque el calendario se vuelva a dibujar)
 let estadoConexion = '';
+
+// --- Facebook ---
+function seccionFacebook(){
+  const f = agendaInfo.fb;
+  if(f) return `
+    <div class="fb-box">
+      <b>Facebook:</b> ${f.activo ? `✅ publica también en la página <b>${esc(f.nombre)}</b>` : `⏸ en pausa (página ${esc(f.nombre)})`}
+      <button class="btn btn-soft" onclick="activarFacebook(${!f.activo})">${f.activo ? 'Pausar Facebook' : 'Reanudar Facebook'}</button>
+      <button class="btn btn-soft" onclick="mostrarConexionFB()">Cambiar página</button>
+      <div id="fb-form"></div>
+    </div>`;
+  return `
+    <div class="fb-box">
+      <b>Facebook:</b> no conectado.
+      <button class="btn btn-soft" onclick="mostrarConexionFB()">Conectar página de Facebook</button>
+      <div id="fb-form"></div>
+    </div>`;
+}
+
+function mostrarConexionFB(){
+  document.getElementById('fb-form').innerHTML = `
+    <div class="editor-agenda">
+      <p class="muted">Pegá acá el token de usuario de Facebook (lo sacás del Explorador de la API Graph, con los permisos <b>pages_show_list</b>, <b>pages_manage_posts</b> y <b>pages_read_engagement</b>). Se usa una sola vez para conectar la página y no se guarda.</p>
+      <textarea id="fb-token" style="min-height:70px" placeholder="EAA..."></textarea>
+      <div id="fb-paginas"></div>
+      <div class="acciones"><button class="btn btn-primary" onclick="conectarFacebook(this)">Conectar</button></div>
+    </div>`;
+}
+
+async function conectarFacebook(btn){
+  const user_token = document.getElementById('fb-token').value.trim();
+  const page_id = document.getElementById('fb-pagina')?.value;
+  if(!user_token){ toast('Pegá el token primero'); return; }
+  btn.disabled = true;
+  try{
+    const r = await api('POST', '/instagram/facebook/conectar', { user_token, page_id });
+    if(r.elegir){
+      document.getElementById('fb-paginas').innerHTML = `<label class="field" style="margin-top:8px">¿Qué página?
+        <select id="fb-pagina">${r.elegir.map(p => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join('')}</select></label>`;
+      toast('Elegí la página y tocá Conectar de nuevo');
+    }else{
+      toast(`Conectado a la página ${r.pagina.nombre}`);
+      await cargarAgenda(); render();
+    }
+  }catch(e){ toast(e.message); }
+  btn.disabled = false;
+}
+
+async function activarFacebook(activo){
+  try{
+    await api('POST', '/instagram/facebook/activo', { activo });
+    toast(activo ? 'Facebook reanudado' : 'Facebook en pausa');
+    await cargarAgenda(); render();
+  }catch(e){ toast(e.message); }
+}
+
+async function publicarFacebook(id, btn){
+  btn.disabled = true; btn.innerHTML = '<span class="spinner oscuro"></span> Publicando…';
+  try{
+    await api('POST', `/instagram/borradores/${id}/publicar-facebook`);
+    toast('¡Publicado en Facebook!');
+  }catch(e){ toast(e.message); }
+  await cargarBorradores();
+}
 
 async function probarConexion(btn){
   btn.disabled = true;
