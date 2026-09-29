@@ -99,6 +99,7 @@ Genera publicaciones (borradores) a partir de los productos de `proveedores`. C�
 | `IG_TEMA` | `panel` (default), `color` o `crema` |
 | `IG_RECORTE` | `ninguno` (default) o `removebg` + `REMOVEBG_API_KEY` |
 | `IG_ACCESS_TOKEN` | Token de la cuenta profesional de Instagram (API con inicio de sesión de Instagram, empieza con `IG`). Se renueva solo cada semana y el ID de la cuenta se averigua solo. Con un token de Facebook (`EAA…`) hace falta además `IG_USER_ID` |
+| `FB_APP_ID`, `FB_APP_SECRET` | App de Meta (Configuración → Básica). Para conectar la página de Facebook y publicar ahí también |
 | `IG_ADMIN_KEY` | Clave que piden generar, editar, borrar y publicar (header `x-admin-key`) |
 
 El logo va en `assets/logo-crear-y-jugar.png`.
@@ -122,6 +123,9 @@ El logo va en `assets/logo-crear-y-jugar.png`.
 - `GET /instagram/plantillas`, `DELETE /instagram/plantillas/:id`
 - `POST /instagram/borradores/:id/marcar-publicado` — para cuando se sube a mano desde el celular
 - `GET /instagram/conexion` — prueba la conexión con Instagram y devuelve el usuario conectado
+- `POST /instagram/facebook/conectar` — `{ "user_token": "EAA...", "page_id"?: "..." }` conecta la página (el token de la página se guarda en `instagram_secretos`, no vence)
+- `POST /instagram/facebook/activo` — `{ "activo": false }` pausa/reanuda Facebook
+- `POST /instagram/borradores/:id/publicar-facebook` — publica en Facebook algo ya publicado en Instagram (o reintenta)
 - `GET /instagram/agenda`, `PUT /instagram/agenda` — días/horarios de publicación y generación automática (se guarda en `config`, clave `instagram_agenda`)
 - `POST /instagram/agenda/generar-semana` — arma los borradores que faltan para los próximos 7 días
 - `POST /instagram/borradores/:id/publicar` — publica un borrador aprobado (requiere las variables de Instagram)

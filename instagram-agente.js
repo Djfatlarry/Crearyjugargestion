@@ -715,7 +715,7 @@ async function prepararToken(sb) {
   if (!env) { ig.token = null; return; }
   const base = crypto.createHash('sha1').update(env).digest('hex').slice(0, 12);
   if (ig.base !== base) {
-    const guardado = await leerConfig(sb, 'instagram_token');
+    const guardado = await leerSecreto(sb, 'instagram_token');
     ig.token = guardado?.base === base && guardado.token ? guardado.token : env;
     ig.base = base;
     ig.userId = null;
@@ -725,7 +725,7 @@ async function prepararToken(sb) {
 // Los tokens de Instagram duran 60 días: se renuevan una vez por semana (necesitan tener 24 h)
 async function renovarTokenSiHaceFalta(sb) {
   if (!esTokenInstagram(ig.token)) return;
-  const guardado = await leerConfig(sb, 'instagram_token');
+  const guardado = await leerSecreto(sb, 'instagram_token');
   const ultimo = guardado?.base === ig.base ? Date.parse(guardado.renovado_at || guardado.intento_at || 0) : 0;
   const esperar = guardado?.renovado_at ? 7 * 86400e3 : 86400e3;
   if (Date.now() - ultimo < esperar) return;
@@ -734,13 +734,13 @@ async function renovarTokenSiHaceFalta(sb) {
     const data = await r.json().catch(() => ({}));
     if (!r.ok || !data.access_token) throw new Error(data.error?.message || r.status);
     ig.token = data.access_token;
-    await guardarConfig(sb, 'instagram_token', {
+    await guardarSecreto(sb, 'instagram_token', {
       base: ig.base, token: data.access_token, renovado_at: new Date().toISOString(),
       vence: new Date(Date.now() + (data.expires_in || 0) * 1000).toISOString(),
     });
   } catch (e) {
     console.error(`[instagram] no se pudo renovar el token: ${e.message}`);
-    await guardarConfig(sb, 'instagram_token', { ...(guardado?.base === ig.base ? guardado : { base: ig.base }), intento_at: new Date().toISOString() });
+    await guardarSecreto(sb, 'instagram_token', { ...(guardado?.base === ig.base ? guardado : { base: ig.base }), intento_at: new Date().toISOString() });
   }
 }
 
@@ -787,12 +787,85 @@ async function publicarEnInstagram({ slides, caption }) {
   return (await graph('POST', `${usuario}/media_publish`, { creation_id: creacion })).id;
 }
 
-async function publicarBorrador(sb, b) {
+// --- Tokens (tabla instagram_secretos: cerrada, solo el backend la lee) ---
+
+async function leerSecreto(sb, key) {
+  const fila = (await sb('GET', 'instagram_secretos', { filter: `key=eq.${key}` }))?.[0];
+  if (fila) return fila.value;
+  // Mudanza: el token de Instagram antes se guardaba en config (tabla con política abierta)
+  const viejo = (await sb('GET', 'config', { filter: `key=eq.${key}` }))?.[0]?.value;
+  if (viejo) {
+    await guardarSecreto(sb, key, viejo);
+    await sb('DELETE', `config?key=eq.${key}`, { prefer: 'return=minimal' });
+  }
+  return viejo;
+}
+
+async function guardarSecreto(sb, key, value) {
+  await sb('POST', 'instagram_secretos', { body: { key, value, updated_at: new Date().toISOString() }, prefer: 'resolution=merge-duplicates,return=minimal' });
+}
+
+// --- 6b. Facebook (página) ---
+//
+// Se publica en la página de Facebook al mismo tiempo que en Instagram. Se conecta desde la página de
+// revisión con un token de usuario (Graph API Explorer): el backend lo cambia por uno de larga duración
+// usando FB_APP_ID + FB_APP_SECRET y guarda el token de la página, que así no vence.
+
+const fb = { pagina: null };
+
+async function cargarFacebook(sb) {
+  fb.pagina = (await leerSecreto(sb, 'facebook_pagina')) || null;
+}
+
+function fbConectado() {
+  return Boolean(fb.pagina?.token && fb.pagina.activo !== false);
+}
+
+async function graphFB(ruta, params, token) {
+  const r = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${ruta}`, { method: 'POST', body: new URLSearchParams({ ...params, access_token: token }) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data.error) throw new Error(`Facebook: ${data.error?.message || r.status}`);
+  return data;
+}
+
+async function publicarEnFacebook({ slides, caption }) {
+  const p = fb.pagina;
+  if (slides.length === 1) {
+    const r = await graphFB(`${p.id}/photos`, { url: slides[0], caption: caption || '' }, p.token);
+    return r.post_id || r.id;
+  }
+  // Varias fotos: se suben sin publicar y después se publica un posteo que las incluye a todas
+  const ids = [];
+  for (const url of slides.slice(0, 10)) ids.push((await graphFB(`${p.id}/photos`, { url, published: 'false' }, p.token)).id);
+  const params = { message: caption || '' };
+  ids.forEach((id, i) => { params[`attached_media[${i}]`] = JSON.stringify({ media_fbid: id }); });
+  return (await graphFB(`${p.id}/feed`, params, p.token)).id;
+}
+
+async function conectarFacebook(sb, userToken, pageId) {
+  const appId = process.env.FB_APP_ID;
+  const secreto = process.env.FB_APP_SECRET;
+  if (!appId || !secreto) throw new Error('Faltan FB_APP_ID y FB_APP_SECRET en Render');
+  const q = new URLSearchParams({ grant_type: 'fb_exchange_token', client_id: appId, client_secret: secreto, fb_exchange_token: userToken });
+  const ll = await (await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/oauth/access_token?${q}`)).json().catch(() => ({}));
+  if (!ll.access_token) throw new Error(`Facebook: ${ll.error?.message || 'no se pudo validar el token'}`);
+  const cuentas = await (await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/me/accounts?${new URLSearchParams({ fields: 'id,name,access_token', access_token: ll.access_token })}`)).json().catch(() => ({}));
+  if (cuentas.error) throw new Error(`Facebook: ${cuentas.error.message}`);
+  const paginas = cuentas.data || [];
+  if (!paginas.length) throw new Error('Ese usuario no administra ninguna página, o faltan los permisos pages_show_list y pages_manage_posts');
+  const pagina = pageId ? paginas.find((x) => x.id === pageId) : paginas.length === 1 ? paginas[0] : null;
+  if (!pagina) return { elegir: paginas.map((x) => ({ id: x.id, nombre: x.name })) };
+  fb.pagina = { id: pagina.id, nombre: pagina.name, token: pagina.access_token, activo: true, conectado_at: new Date().toISOString() };
+  await guardarSecreto(sb, 'facebook_pagina', fb.pagina);
+  return { pagina: { id: pagina.id, nombre: pagina.name } };
+}
+
+// Publica en Facebook y lo registra. Si falla, deja el error a la vista (Instagram ya quedó publicado)
+async function publicarSoloFacebook(sb, b) {
   try {
-    const mediaId = await publicarEnInstagram({ slides: b.slides, caption: b.caption });
-    const ahora = new Date().toISOString();
+    const postId = await publicarEnFacebook({ slides: b.slides, caption: b.caption });
     const [actualizado] = await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(b.id)}`, {
-      body: { estado: 'publicado', ig_media_id: mediaId, publicado_at: ahora, updated_at: ahora, error: null },
+      body: { fb_post_id: postId, error: null, updated_at: new Date().toISOString() },
       prefer: 'return=representation',
     });
     return actualizado;
@@ -800,6 +873,29 @@ async function publicarBorrador(sb, b) {
     await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(b.id)}`, { body: { error: e.message, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
     throw e;
   }
+}
+
+async function publicarBorrador(sb, b) {
+  let actualizado;
+  try {
+    const mediaId = await publicarEnInstagram({ slides: b.slides, caption: b.caption });
+    const ahora = new Date().toISOString();
+    [actualizado] = await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(b.id)}`, {
+      body: { estado: 'publicado', ig_media_id: mediaId, publicado_at: ahora, updated_at: ahora, error: null },
+      prefer: 'return=representation',
+    });
+  } catch (e) {
+    await sb('PATCH', `publicaciones_borrador?id=eq.${encodeURIComponent(b.id)}`, { body: { error: e.message, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+    throw e;
+  }
+  // Facebook va después de Instagram; si falla, Instagram igual queda publicado
+  if (fbConectado() && !b.fb_post_id) {
+    actualizado = await publicarSoloFacebook(sb, actualizado).catch((e) => {
+      console.error(`[instagram] Facebook no publicó ${b.id}: ${e.message}`);
+      return { ...actualizado, error: e.message };
+    });
+  }
+  return actualizado;
 }
 
 // --- 7. Agenda (calendarización) ---
@@ -893,6 +989,7 @@ async function cicloAgenda(sb, llamarClaude, estado, ahora = new Date()) {
   try {
     await prepararToken(sb);
     await renovarTokenSiHaceFalta(sb);
+    await cargarFacebook(sb);
     const agenda = await leerAgenda(sb);
     const p = partesAR(ahora);
     if (agenda.auto && p.dow === agenda.generacion.dia && p.hm >= agenda.generacion.hora) {
@@ -1082,6 +1179,7 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
   // Publica un borrador aprobado en Instagram
   app.post('/instagram/borradores/:id/publicar', requiereClave, async (req, res) => {
     await prepararToken(sb).catch(() => {});
+    await cargarFacebook(sb).catch(() => {});
     if (!igConfigurado()) return err(res, 'Instagram todavía no está conectado (falta IG_ACCESS_TOKEN en Render)', 501);
     try {
       const b = await buscarBorrador(req.params.id);
@@ -1112,9 +1210,42 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
       await prepararToken(sb);
       if (!igConfigurado()) return ok(res, { conectado: false, motivo: 'Falta cargar IG_ACCESS_TOKEN en Render' });
       const cuenta = await cuentaIG();
-      const t = await leerConfig(sb, 'instagram_token');
+      const t = await leerSecreto(sb, 'instagram_token');
       ok(res, { conectado: true, usuario: cuenta.usuario, tipo: esTokenInstagram(ig.token) ? 'instagram' : 'facebook', vence: t?.base === ig.base ? t.vence || null : null });
     } catch (e) { ok(res, { conectado: false, motivo: e.message }); }
+  });
+
+  // --- Facebook ---
+
+  app.post('/instagram/facebook/conectar', requiereClave, async (req, res) => {
+    const token = String(req.body?.user_token || '').trim();
+    if (!token) return err(res, 'Pegá el token de Facebook', 400);
+    try { ok(res, await conectarFacebook(sb, token, req.body?.page_id)); }
+    catch (e) { err(res, e.message, 400); }
+  });
+
+  // Pausar / reanudar la publicación en Facebook: { activo: true | false }
+  app.post('/instagram/facebook/activo', requiereClave, async (req, res) => {
+    try {
+      await cargarFacebook(sb);
+      if (!fb.pagina) return err(res, 'Facebook no está conectado', 400);
+      fb.pagina = { ...fb.pagina, activo: req.body?.activo !== false };
+      await guardarSecreto(sb, 'facebook_pagina', fb.pagina);
+      ok(res, { activo: fb.pagina.activo });
+    } catch (e) { err(res, e.message); }
+  });
+
+  // Publicar en Facebook una publicación que ya salió en Instagram (o reintentar si falló)
+  app.post('/instagram/borradores/:id/publicar-facebook', requiereClave, async (req, res) => {
+    try {
+      await cargarFacebook(sb);
+      if (!fbConectado()) return err(res, 'Facebook no está conectado', 400);
+      const b = await buscarBorrador(req.params.id);
+      if (!b) return err(res, 'Borrador no encontrado', 404);
+      if (b.estado !== 'publicado') return err(res, 'Primero tiene que estar publicado en Instagram', 400);
+      if (b.fb_post_id) return err(res, 'Ya está publicado en Facebook', 400);
+      ok(res, { borrador: await publicarSoloFacebook(sb, b) });
+    } catch (e) { err(res, e.message); }
   });
 
   // --- Agenda ---
@@ -1123,7 +1254,8 @@ module.exports = function registrarInstagramAgente(app, sb, llamarClaude) {
     try {
       const agenda = await leerAgenda(sb);
       await prepararToken(sb).catch(() => {});
-      ok(res, { agenda, ig_conectado: igConfigurado(), proximos: proximosSlots(agenda, new Date(), 14).map((f) => f.toISOString()) });
+      await cargarFacebook(sb).catch(() => {});
+      ok(res, { agenda, ig_conectado: igConfigurado(), fb: fb.pagina ? { nombre: fb.pagina.nombre, activo: fb.pagina.activo !== false } : null, proximos: proximosSlots(agenda, new Date(), 14).map((f) => f.toISOString()) });
     } catch (e) { err(res, e.message); }
   });
 
