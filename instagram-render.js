@@ -55,6 +55,8 @@ function fuentes() {
     { name: 'Lexend', weight: 400, style: 'normal', data: fuente(lx, 'lexend-latin-400-normal.woff') },
     { name: 'Lexend', weight: 500, style: 'normal', data: fuente(lx, 'lexend-latin-500-normal.woff') },
     { name: 'Lexend', weight: 600, style: 'normal', data: fuente(lx, 'lexend-latin-600-normal.woff') },
+    { name: 'Oswald', weight: 700, style: 'normal', data: fuente('@fontsource/oswald', 'oswald-latin-700-normal.woff') },
+    { name: 'Caveat', weight: 700, style: 'normal', data: fuente('@fontsource/caveat', 'caveat-latin-700-normal.woff') },
   ];
   return _fuentes;
 }
@@ -717,6 +719,181 @@ async function festivo(d) {
   );
 }
 
+// --- Plantillas estilo "catálogo" (ideas de Melissa & Doug, con la identidad de Crear y Jugar) ---
+// Títulos en mayúscula condensada (Oswald), acentos manuscritos (Caveat), tarjetas blancas,
+// pastillas "pintadas a pincel" y divisores ondulados.
+
+// Rectángulo redondeado con borde irregular, como pintado a pincel (determinístico según `semilla`)
+function pincel(ancho, alto, color, semilla = 1) {
+  let x = semilla * 9301 + 49297;
+  const azar = () => { x = (x * 9301 + 49297) % 233280; return x / 233280; };
+  const r = alto / 2;
+  const pts = [];
+  const n = 28;
+  for (let i = 0; i < n; i++) {
+    const t = (i / n) * Math.PI * 2;
+    // superelipse: bordes rectos arriba/abajo y puntas redondeadas
+    const cx = Math.cos(t), cy = Math.sin(t);
+    const px = ancho / 2 + Math.sign(cx) * Math.pow(Math.abs(cx), 0.25) * (ancho / 2 - 4);
+    const py = alto / 2 + Math.sign(cy) * Math.pow(Math.abs(cy), 0.9) * (r - 4);
+    pts.push([px + (azar() - 0.5) * 6, py + (azar() - 0.5) * 6]);
+  }
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    d += ` C${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)},${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)} ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)},${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return { type: 'svg', props: { width: ancho, height: alto, viewBox: `0 0 ${ancho} ${alto}`, style: { position: 'absolute', top: 0, left: 0 }, children: [{ type: 'path', props: { d: `${d} Z`, fill: color } }] } };
+}
+
+function pastillaPincel(texto, { ancho = 300, alto = 88, fondo, color = COLORES.violeta, tam = 34, semilla = 1 } = {}) {
+  return h('div', { position: 'relative', width: ancho, height: alto, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    pincel(ancho, alto, fondo, semilla),
+    h('div', { fontFamily: 'Lexend', fontWeight: 600, fontSize: tam, color }, texto));
+}
+
+// Etiqueta manuscrita con subrayado a mano ("¡Nuevo!", "Favorito")
+function etiquetaManuscrita(texto, color = '#E48F6E', tam = 44) {
+  const ancho = Math.round(texto.length * tam * 0.42 + 10);
+  return h('div', { flexDirection: 'column', alignItems: 'center', transform: 'rotate(-6deg)' },
+    h('div', { fontFamily: 'Caveat', fontWeight: 700, fontSize: tam, color, lineHeight: 1 }, texto),
+    { type: 'svg', props: { width: ancho, height: 14, viewBox: `0 0 ${ancho} 14`, children: [
+      { type: 'path', props: { d: `M2 9 C ${ancho * 0.3} 3, ${ancho * 0.7} 3, ${ancho - 2} 7`, fill: 'none', stroke: color, 'stroke-width': 3, 'stroke-linecap': 'round' } },
+      { type: 'path', props: { d: `M${ancho * 0.12} 13 C ${ancho * 0.4} 9, ${ancho * 0.75} 9, ${ancho * 0.92} 11`, fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linecap': 'round' } },
+    ] } });
+}
+
+function tituloCondensado(texto, { tam = 104, color = COLORES.violeta, acento, colorAcento = COLORES.lavanda } = {}) {
+  // `acento`: una palabra del título que va en manuscrita, como el "All" de "FUN FOR All AGES"
+  const partes = acento ? texto.split(acento) : [texto];
+  const trozos = [];
+  partes.forEach((p, i) => {
+    if (p.trim()) trozos.push(h('div', { fontFamily: 'Oswald', fontWeight: 700, fontSize: tam, lineHeight: 1.05, textTransform: 'uppercase', letterSpacing: 1, color, textAlign: 'center', justifyContent: 'center' }, p.trim()));
+    if (acento && i < partes.length - 1) trozos.push(h('div', { fontFamily: 'Caveat', fontWeight: 700, fontSize: tam * 1.05, color: colorAcento, marginTop: tam * 0.08 }, acento));
+  });
+  return h('div', { flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', columnGap: 22, lineHeight: 1.02 }, trozos);
+}
+
+function onda(color, y, alto = 90) {
+  return { type: 'path', props: { d: `M0 ${y + alto * 0.5} C 270 ${y - alto * 0.2}, 540 ${y + alto * 0.9}, 810 ${y + alto * 0.3} C 930 ${y}, 1010 ${y + alto * 0.1}, 1080 ${y + alto * 0.35} L1080 ${H} L0 ${H} Z`, fill: color } };
+}
+
+// Vitrina: hasta 4 productos en tarjetas blancas, con etiqueta manuscrita opcional
+// d: { titulo, acento?, bajada?, productos: [{ nombre, edad, foto, etiqueta? }] }
+async function vitrina(d) {
+  const prods = (d.productos || []).slice(0, 4);
+  const tarjeta = (p, i) => h('div', {
+    width: 450, height: 450, backgroundColor: COLORES.blanco, borderRadius: 40, border: '3px solid #ECE8F4',
+    flexDirection: 'column', alignItems: 'center', padding: '22px 22px 20px', position: 'relative', boxShadow: '0 10px 30px rgba(82,72,108,0.08)',
+  },
+    img(refImagen(p.foto), { width: 400, height: 280, objectFit: 'contain', borderRadius: 20 }),
+    h('div', { marginTop: 14, fontSize: 28, fontWeight: 600, textAlign: 'center', justifyContent: 'center', lineHeight: 1.15, maxWidth: 400 }, p.nombre),
+    p.edad ? h('div', { marginTop: 10 }, pastilla(p.edad, { fondo: [COLORES.menta, COLORES.durazno, COLORES.manteca, '#E4DEF3'][i % 4], color: COLORES.violeta, tam: 22, peso: 600, padY: 6, padX: 18 })) : null,
+    p.etiqueta ? h('div', { position: 'absolute', top: 14, right: 18 }, etiquetaManuscrita(p.etiqueta)) : null,
+  );
+  return h('div', {
+    width: W, height: H, backgroundColor: CREMA, flexDirection: 'column', alignItems: 'center',
+    padding: '64px 60px 40px', color: COLORES.violeta, fontFamily: 'Lexend', position: 'relative',
+  },
+    capaSvg([onda(COLORES.lavanda, 1180, 80), iconoSvg('chispa', 90, 90, 30, COLORES.lavanda, 0), iconoSvg('estrella', 960, 110, 30, '#F5D76E', 10)]),
+    h('div', { fontFamily: 'Caveat', fontWeight: 700, fontSize: 46, lineHeight: 1.2, height: 60, marginBottom: 4, color: '#E48F6E', transform: 'rotate(-3deg)' }, d.antetitulo || 'Crear y Jugar recomienda'),
+    tituloCondensado(d.titulo, { acento: d.acento, tam: d.titulo.length > 18 ? 84 : 100 }),
+    d.bajada ? h('div', { marginTop: 8, fontSize: 30, opacity: 0.9, textAlign: 'center', justifyContent: 'center' }, d.bajada) : null,
+    h('div', { flexWrap: 'wrap', gap: 30, justifyContent: 'center', marginTop: 34, width: 960 }, prods.map(tarjeta)),
+    h('div', { flexGrow: 1 }),
+    h('div', { width: '100%', justifyContent: 'space-between', alignItems: 'center' },
+      h('div', { fontSize: 26, fontWeight: 600, color: COLORES.blanco, paddingLeft: 12 }, URL_TIENDA),
+      logoConAro(110)),
+  );
+}
+
+// Guía por edad: una fila por rango de edad con una pastilla "a pincel" y hasta 2 productos
+// d: { titulo, acento?, bajada?, grupos: [{ edad, productos: [{ nombre, foto }] }] }
+async function porEdad(d) {
+  const colores = [COLORES.durazno, COLORES.manteca, '#D9D2F0', COLORES.menta, '#CBE8C9'];
+  const grupos = (d.grupos || []).slice(0, 4);
+  return h('div', {
+    width: W, height: H, backgroundColor: '#F6F4FA', flexDirection: 'column', alignItems: 'center',
+    padding: '70px 64px 44px', color: COLORES.violeta, fontFamily: 'Lexend', position: 'relative',
+  },
+    capaSvg([{ type: 'path', props: { d: 'M0 0 L1080 0 L1080 250 C 820 300, 600 210, 330 265 C 180 295, 80 270, 0 255 Z', fill: COLORES.blanco } }]),
+    tituloCondensado(d.titulo, { acento: d.acento, tam: 84 }),
+    d.bajada ? h('div', { marginTop: 10, fontSize: 30, textAlign: 'center', justifyContent: 'center' }, d.bajada) : null,
+    h('div', { flexDirection: 'column', width: '100%', marginTop: 80, gap: 34 },
+      grupos.map((g, i) => h('div', { alignItems: 'center', gap: 28, backgroundColor: COLORES.blanco, borderRadius: 36, padding: '18px 26px', boxShadow: '0 8px 24px rgba(82,72,108,0.07)' },
+        pastillaPincel(g.edad, { ancho: 280, alto: 84, fondo: colores[i % colores.length], tam: 32, semilla: i + 3 }),
+        h('div', { flexGrow: 1, gap: 22, alignItems: 'center' },
+          (g.productos || []).slice(0, 2).map((p) => h('div', { alignItems: 'center', gap: 14, width: 290 },
+            img(refImagen(p.foto), { width: 140, height: 140, borderRadius: 140, objectFit: 'cover', border: `6px solid ${colores[i % colores.length]}` }),
+            h('div', { fontSize: 25, fontWeight: 600, lineHeight: 1.2, flexShrink: 1 }, p.nombre)))),
+      ))),
+    h('div', { flexGrow: 1 }),
+    h('div', { width: '100%', justifyContent: 'space-between', alignItems: 'flex-end' },
+      h('div', { fontFamily: 'Caveat', fontWeight: 700, fontSize: 40, color: COLORES.lavanda, paddingBottom: 20 }, 'Hay un juego para cada etapa'),
+      logoConAro(110)),
+  );
+}
+
+// Destacado: texto grande arriba y la foto del producto abajo, con borde ondulado
+// d: { antetitulo?, titulo, texto?, llamado?, foto }
+async function destacado(d) {
+  return h('div', {
+    width: W, height: H, backgroundColor: COLORES.manteca, flexDirection: 'column', alignItems: 'center',
+    padding: '80px 80px 0', color: COLORES.violeta, fontFamily: 'Lexend', position: 'relative',
+  },
+    img(refImagen(d.foto), { position: 'absolute', left: 0, top: 640, width: W, height: 710, objectFit: 'cover' }),
+    capaSvg([{ type: 'path', props: { d: 'M0 600 L1080 600 L1080 690 C 820 760, 560 640, 300 700 C 170 730, 70 715, 0 700 Z', fill: COLORES.manteca } }]),
+    h('div', { fontFamily: 'Caveat', fontWeight: 700, fontSize: 54, lineHeight: 1.2, height: 70, color: '#E48F6E', transform: 'rotate(-3deg)' }, d.antetitulo || '¡Nuevo en el local!'),
+    h('div', { fontFamily: 'Oswald', fontWeight: 700, fontSize: d.titulo.length > 22 ? 100 : 124, lineHeight: 1, textTransform: 'uppercase', textAlign: 'center', justifyContent: 'center', maxWidth: 920, marginTop: 6 }, d.titulo),
+    d.texto ? h('div', { marginTop: 18, fontSize: 30, lineHeight: 1.4, textAlign: 'center', justifyContent: 'center', maxWidth: 820 }, d.texto) : null,
+    h('div', { marginTop: 24, alignItems: 'center', gap: 14, backgroundColor: COLORES.violeta, color: COLORES.blanco, borderRadius: 999, padding: '16px 34px', fontSize: 28, fontWeight: 600 },
+      h('div', {}, d.llamado || 'Conocelo en la tienda'), icono('flecha', 30, COLORES.blanco)),
+    h('div', { position: 'absolute', right: 44, bottom: 44 }, logoConAro(120)),
+  );
+}
+
+// Por qué elegirnos: tres "sellos" con ícono, título y texto corto (idea de las filas de confianza de
+// tiendas Montessori). Los textos tienen que ser verdaderos: los confirma la dueña, no se inventan.
+// d: { titulo, bajada?, valores: [{ icono, titulo, texto }] }
+async function valores(d) {
+  const estilos = [
+    { fondo: '#FBE3D7', color: '#E48F6E' },
+    { fondo: '#FFF0B3', color: '#E0B530' },
+    { fondo: '#D6EEEA', color: '#5FB3A8' },
+  ];
+  const vals = (d.valores || []).slice(0, 3);
+  return h('div', {
+    width: W, height: H, backgroundColor: COLORES.blanco, flexDirection: 'column', alignItems: 'center',
+    padding: '90px 70px 50px', color: COLORES.violeta, fontFamily: 'Lexend', position: 'relative',
+  },
+    capaSvg([
+      { type: 'path', props: { d: 'M0 0 L1080 0 L1080 170 C 800 230, 560 130, 300 190 C 170 220, 70 205, 0 190 Z', fill: '#EFECF6' } },
+      onda('#F6F4FA', 1150, 70),
+      iconoSvg('chispa', 970, 1030, 30, COLORES.lavanda, 0),
+      iconoSvg('corazon', 900, 110, 26, '#F2B8A0', -10),
+    ]),
+    h('div', { fontFamily: 'Caveat', fontWeight: 700, fontSize: 48, lineHeight: 1.2, height: 64, color: COLORES.lavanda, transform: 'rotate(-3deg)', marginTop: 60 }, d.antetitulo || 'Crear y Jugar'),
+    tituloCondensado(d.titulo, { tam: 88 }),
+    d.bajada ? h('div', { marginTop: 14, fontSize: 30, lineHeight: 1.4, textAlign: 'center', justifyContent: 'center', maxWidth: 820 }, d.bajada) : null,
+    h('div', { flexDirection: 'column', width: '100%', gap: 44, marginTop: 70 },
+      vals.map((v, i) => {
+        const e = estilos[i % estilos.length];
+        return h('div', { alignItems: 'center', gap: 30 },
+          h('div', { width: 124, height: 124, borderRadius: 124, backgroundColor: e.fondo, alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: `3px dashed ${e.color}` },
+            icono(v.icono || ['estrella', 'corazon', 'chispa'][i % 3], 56, e.color)),
+          h('div', { flexDirection: 'column', flexShrink: 1 },
+            h('div', { fontSize: 36, fontWeight: 600 }, v.titulo),
+            v.texto ? h('div', { fontSize: 27, lineHeight: 1.4, marginTop: 6, opacity: 0.88 }, v.texto) : null));
+      })),
+    h('div', { flexGrow: 1 }),
+    h('div', { width: '100%', justifyContent: 'space-between', alignItems: 'flex-end' },
+      h('div', { flexDirection: 'column', gap: 10, paddingBottom: 10 },
+        lineaIcono('pin', DIRECCION_LOCAL, COLORES.violeta, 26),
+        h('div', { fontSize: 26, fontWeight: 600, color: COLORES.lavanda }, USUARIO_IG)),
+      logoConAro(110, COLORES.lavanda)),
+  );
+}
+
 // --- HTML editable ---
 //
 // Cada slide se guarda como HTML con estilos en línea: es lo que Claude edita en el chat.
@@ -803,6 +980,10 @@ const PLANTILLAS = {
   producto_imagen: productoImagen,
   institucional,
   festivo,
+  vitrina,
+  por_edad: porEdad,
+  destacado,
+  valores,
 };
 
 async function htmlDePlantilla(plantilla, datos) {
