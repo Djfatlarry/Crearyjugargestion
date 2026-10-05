@@ -50,7 +50,11 @@ function similitudNombres(a, b) {
   let interseccion = 0;
   for (const t of ta) if (tb.has(t)) interseccion++;
   const union = new Set([...ta, ...tb]).size;
-  return interseccion / union;
+  const jaccard = interseccion / union;
+  // Coincidencia parcial: el nombre más corto está casi todo dentro del más largo (ej. "Xilofón" vs "Xilofón De Madera 5 Notas").
+  // Tope de 0.8: nunca llega a vínculo automático, siempre pasa por revisión manual.
+  const contenido = interseccion >= 2 ? 0.8 * (interseccion / Math.min(ta.size, tb.size)) : 0;
+  return Math.max(jaccard, contenido);
 }
 
 // Umbrales de confianza
@@ -127,12 +131,17 @@ module.exports = function registrarReconciliacionTiendanube(app, sb) {
   // 1b. Correr el emparejamiento real contra Supabase
   app.post('/api/tiendanube/reconciliar', async (req, res) => {
     try {
+      const umbralRevision = Number(req.query.umbral) || UMBRAL_REVISION;
       const productosTN = await traerProductosTiendanube();
 
       const proveedores = await sb('GET', 'proveedores', {
-        select: 'id,nombre,codigo,tiendanube_product_id',
+        select: 'id,nombre,codigo,tiendanube_product_id,stock',
         limit: 5000,
       });
+
+      // Productos de Tiendanube que ya pasaron por la cola (pendientes, confirmados o rechazados): no se vuelven a procesar
+      const colaPrevia = await sb('GET', 'tiendanube_matches_pendientes', { select: 'tiendanube_product_id', limit: 5000 });
+      const yaEnCola = new Set((colaPrevia || []).map(r => Number(r.tiendanube_product_id)));
 
       const porCodigo = new Map();
       for (const p of proveedores) {
@@ -144,11 +153,15 @@ module.exports = function registrarReconciliacionTiendanube(app, sb) {
         proveedores.filter(p => p.tiendanube_product_id).map(p => p.tiendanube_product_id)
       );
 
-      const resumen = { auto_vinculados: 0, a_revision: 0, sin_match: 0, ya_vinculados: 0 };
+      const resumen = { auto_vinculados: 0, a_revision: 0, sin_match: 0, ya_vinculados: 0, ya_revisados_antes: 0, vinculados_sin_stock_en_app: 0 };
 
       for (const prodTN of productosTN) {
         if (yaVinculados.has(prodTN.id)) {
           resumen.ya_vinculados++;
+          continue;
+        }
+        if (yaEnCola.has(Number(prodTN.id))) {
+          resumen.ya_revisados_antes++;
           continue;
         }
 
@@ -170,7 +183,7 @@ module.exports = function registrarReconciliacionTiendanube(app, sb) {
               mejor = p;
             }
           }
-          if (mejor && mejorScore >= UMBRAL_REVISION) {
+          if (mejor && mejorScore >= umbralRevision) {
             candidato = mejor;
             confianza = mejorScore;
             origen = 'nombre';
@@ -186,6 +199,7 @@ module.exports = function registrarReconciliacionTiendanube(app, sb) {
           await sb('PATCH', `proveedores?id=eq.${candidato.id}`, {
             body: {
               tiendanube_product_id: prodTN.id,
+              tiendanube_variant_id: (prodTN.variants && prodTN.variants[0]) ? prodTN.variants[0].id : null,
               match_confianza: confianza,
               match_origen: origen,
               updated_at: new Date().toISOString(),
@@ -193,6 +207,7 @@ module.exports = function registrarReconciliacionTiendanube(app, sb) {
             prefer: 'return=minimal',
           });
           resumen.auto_vinculados++;
+          if (!candidato.stock || Number(candidato.stock) <= 0) resumen.vinculados_sin_stock_en_app++;
         } else {
           await sb('POST', 'tiendanube_matches_pendientes', {
             body: {
@@ -236,6 +251,7 @@ module.exports = function registrarReconciliacionTiendanube(app, sb) {
       await sb('PATCH', `proveedores?id=eq.${pendiente.proveedor_id}`, {
         body: {
           tiendanube_product_id: pendiente.tiendanube_product_id,
+          tiendanube_variant_id: (pendiente.tiendanube_data && pendiente.tiendanube_data.variants && pendiente.tiendanube_data.variants[0]) ? pendiente.tiendanube_data.variants[0].id : null,
           match_confianza: pendiente.confianza,
           match_origen: 'manual',
           updated_at: new Date().toISOString(),
