@@ -7,12 +7,13 @@ const XLSX = require('xlsx');
 const registrarReconciliacionTiendanube = require('./tiendanube-reconciliacion');
 const registrarAuthTiendanube = require('./auth-tiendanube');
 const registrarInstagramAgente = require('./instagram-agente');
+const registrarPedidosTiendanube = require('./tiendanube-pedidos');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 } }); // 40MB, algunas listas traen imágenes incrustadas
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '20mb' }));
+app.use(express.json({ limit: '20mb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
@@ -171,6 +172,12 @@ app.delete('/proveedores/lista/:proveedor', async (req, res) => {
 app.patch('/proveedores/:id', async (req, res) => {
   const { id } = req.params;
   try {
+    // Para el envío automático de stock a Tiendanube: ver cómo estaba el producto antes de este cambio
+    let previo = null;
+    if (req.body.stock !== undefined || req.body.tiendanube_product_id !== undefined) {
+      const ex0 = await sb('GET', 'proveedores', { filter: `id=eq.${id}`, select: 'stock,tiendanube_product_id' });
+      previo = ex0?.[0] || null;
+    }
     if (req.body.precio_venta !== undefined) {
       const ex = await sb('GET', 'proveedores', { filter: `id=eq.${id}`, select: 'nombre,precio_venta' });
       const prev = ex?.[0];
@@ -180,6 +187,15 @@ app.patch('/proveedores/:id', async (req, res) => {
     }
     await sb('PATCH', `proveedores?id=eq.${id}`, { body: { ...req.body, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
     ok(res, {});
+    // Después de responder (la app no espera a Tiendanube): si el producto está vinculado y cambió su stock, o se acaba de vincular, se envía el stock a la tienda
+    const stockNuevo = req.body.stock;
+    const cambioStock = stockNuevo !== undefined && stockNuevo !== null && stockNuevo !== '' &&
+      (previo?.stock === null || previo?.stock === undefined || Number(stockNuevo) !== Number(previo.stock));
+    const seVinculo = !!req.body.tiendanube_product_id && Number(req.body.tiendanube_product_id) !== Number(previo?.tiendanube_product_id);
+    const estaVinculado = !!(req.body.tiendanube_product_id || previo?.tiendanube_product_id);
+    if (estaVinculado && (cambioStock || seVinculo)) {
+      empujarStockTn(id).catch(e => console.error(`[stock-tn] ${id}: no se pudo enviar el stock: ${e.message}`));
+    }
   } catch (e) { err(res, e.message); }
 });
 app.post('/proveedores/bulk', async (req, res) => {
@@ -231,6 +247,42 @@ async function tn(method, path, body) {
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (!res.ok) throw new Error(`Tiendanube ${method} ${path}: ${res.status} ${typeof data === 'string' ? data : JSON.stringify(data)}`);
   return data;
+}
+
+// Envía a Tiendanube el stock actual de un producto vinculado (el de la app manda).
+// - Stock vacío ("sin cargar"): no se toca nada en la tienda.
+// - Stock 0: la tienda queda con stock 0 (sin stock). No se borra la publicación ni se pierde el vínculo.
+async function empujarStockTn(id) {
+  if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return;
+  // Se lee el stock vigente en la base (no el del pedido), así si hubo varios cambios seguidos queda el último
+  const filas = await sb('GET', 'proveedores', { filter: `id=eq.${id}`, select: 'nombre,stock,tiendanube_product_id,tiendanube_variant_id' });
+  const p = filas?.[0];
+  if (!p || !p.tiendanube_product_id) return;
+  if (p.stock === null || p.stock === undefined) return;
+  const stock = Math.max(0, Math.floor(Number(p.stock)));
+  if (!Number.isFinite(stock)) return;
+
+  const intentar = async () => {
+    let variantId = p.tiendanube_variant_id;
+    if (!variantId) {
+      const prod = await tn('GET', `/products/${p.tiendanube_product_id}`);
+      variantId = prod?.variants?.[0]?.id;
+      if (!variantId) throw new Error('el producto no tiene variante en Tiendanube');
+      await sb('PATCH', `proveedores?id=eq.${id}`, { body: { tiendanube_variant_id: variantId }, prefer: 'return=minimal' });
+    }
+    await tn('PUT', `/products/${p.tiendanube_product_id}/variants/${variantId}`, { stock });
+  };
+  try { await intentar(); }
+  catch (e) {
+    if (/: 429 /.test(e.message)) { await new Promise(r => setTimeout(r, 1500)); await intentar(); }
+    else if (/: 404 /.test(e.message)) {
+      // La publicación ya no existe en la tienda: se limpia el vínculo
+      await sb('PATCH', `proveedores?id=eq.${id}`, { body: { tiendanube_product_id: null, tiendanube_variant_id: null }, prefer: 'return=minimal' });
+      console.log(`[stock-tn] ${p.nombre}: ya no existe en Tiendanube, se limpió el vínculo`);
+      return;
+    } else throw e;
+  }
+  console.log(`[stock-tn] ${p.nombre}: stock ${stock} enviado a Tiendanube`);
 }
 
 // Trae las categorías reales de la tienda, para el desplegable
@@ -446,7 +498,8 @@ const iguales = (a, b) => Math.abs(Number(a) - Number(b)) < 0.005;
 async function actualizarProductoTn(p, catsTn, dryRun) {
   const out = { id: p.id, nombre: p.nombre, cambios: [], sospechoso: [], baja: false, error: null };
 
-  if (!p.stock || Number(p.stock) <= 0) {
+  const stockSinCargar = (p.stock === null || p.stock === undefined);
+  if (!stockSinCargar && Number(p.stock) <= 0) {
     out.baja = true; out.cambios.push('dar de baja (sin stock)');
     if (!dryRun) {
       try { await tn('DELETE', `/products/${p.tiendanube_product_id}`); }
@@ -477,7 +530,9 @@ async function actualizarProductoTn(p, catsTn, dryRun) {
     if (ratio < 0.5 || ratio > 2) out.sospechoso.push(`precio: app $${precioApp} vs Tiendanube $${precioTn} (no se cambió, revisalo)`);
     else { cambioVariante.price = String(precioApp); out.cambios.push(`precio $${precioTn} → $${precioApp}`); }
   }
-  if (variante.stock === null || variante.stock === undefined || Number(variante.stock) !== Number(p.stock)) {
+  if (stockSinCargar) {
+    out.sospechoso.push('stock sin cargar en la app: no se toca el stock en Tiendanube');
+  } else if (variante.stock === null || variante.stock === undefined || Number(variante.stock) !== Number(p.stock)) {
     cambioVariante.stock = Number(p.stock); out.cambios.push(`stock ${variante.stock ?? 'sin límite'} → ${p.stock}`);
   }
   for (const [campoApp, campoTn, etiqueta] of [['peso', 'weight', 'peso'], ['ancho', 'width', 'ancho'], ['alto', 'height', 'alto'], ['profundidad', 'depth', 'profundidad']]) {
@@ -919,6 +974,7 @@ app.post('/admin/reload-catalog', async (_, res) => {
 registrarReconciliacionTiendanube(app, sb);
 registrarInstagramAgente(app, sb, llamarClaude);
 registrarAuthTiendanube(app);
+registrarPedidosTiendanube(app, { sb, tn, empujarStockTn });
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`CYJ backend v3.0 (Supabase) en puerto ${PORT}`));
