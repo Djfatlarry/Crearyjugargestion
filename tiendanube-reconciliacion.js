@@ -128,6 +128,31 @@ module.exports = function registrarReconciliacionTiendanube(app, sb) {
     } catch (e) { err(res, e.message); }
   });
 
+  // 1a-bis. Lo mismo que /productos pero con precio, foto, link y stock (para la herramienta de vinculación)
+  app.get('/api/tiendanube/productos-detalle', async (req, res) => {
+    try {
+      const productos = await traerProductosTiendanube();
+      ok(res, {
+        total: productos.length,
+        productos: productos.map(t => {
+          const v = (t.variants && t.variants[0]) || {};
+          return {
+            id: t.id,
+            nombre: extraerNombre(t),
+            sku: extraerSku(t),
+            precio: Number(v.price) > 0 ? Number(v.price) : null,
+            precio_promo: Number(v.promotional_price) > 0 ? Number(v.promotional_price) : null,
+            stock: v.stock === undefined ? null : v.stock,
+            variantes: (t.variants || []).length,
+            url: t.canonical_url || null,
+            foto: (t.images && t.images[0] && t.images[0].src) || null,
+            publicado: t.published !== false,
+          };
+        }),
+      });
+    } catch (e) { err(res, e.message); }
+  });
+
   // 1b. Correr el emparejamiento real contra Supabase
   app.post('/api/tiendanube/reconciliar', async (req, res) => {
     try {
@@ -226,6 +251,83 @@ module.exports = function registrarReconciliacionTiendanube(app, sb) {
       }
 
       ok(res, { resumen });
+    } catch (e) { err(res, e.message); }
+  });
+
+  // 1b-bis. Importar a la app los productos que existen SOLO en Tiendanube.
+  // - Por defecto es una simulación (no escribe nada). Para aplicar: ?aplicar=1
+  // - Entran con stock vacío ("sin cargar"): el stock se carga en la app y de ahí se sincroniza hacia la tienda.
+  // - Se saltean los que están vinculados o esperando revisión en la cola.
+  app.post('/api/tiendanube/importar', async (req, res) => {
+    try {
+      const aplicar = req.query.aplicar === '1';
+      const GRUPOS_EDAD = { '0-2': '0 a 2 años', '3-5': '3 a 5 años', '6-8': '6 a 8 años', '9-12': '9 a 12 años', 'adolescentes': 'Adolescentes' };
+      const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      const nombreCat = (c) => (c && c.name && (c.name.es || Object.values(c.name)[0])) || (typeof c.name === 'string' ? c.name : '') || '';
+      const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; };
+
+      const productosTN = await traerProductosTiendanube();
+      const vinc = await sb('GET', 'proveedores', { filter: 'tiendanube_product_id=not.is.null', select: 'tiendanube_product_id', limit: 5000 });
+      const cola = await sb('GET', 'tiendanube_matches_pendientes', { filter: 'estado=eq.pendiente', select: 'tiendanube_product_id', limit: 5000 });
+      const excluidos = new Set([...(vinc || []), ...(cola || [])].map(r => Number(r.tiendanube_product_id)));
+
+      const filas = [];
+      const variantesMultiples = [];
+      const ahora = new Date().toISOString();
+      for (const t of productosTN) {
+        if (excluidos.has(Number(t.id))) continue;
+        const variantes = t.variants || [];
+        const v = variantes[0] || {};
+        if (variantes.length > 1) variantesMultiples.push(extraerNombre(t));
+        const cats = (t.categories || []).map(nombreCat).filter(Boolean);
+        const gruposEdad = Object.entries(GRUPOS_EDAD).filter(([, nombre]) => cats.some(c => norm(c) === norm(nombre))).map(([k]) => k);
+        const principal = cats.find(c => norm(c) !== norm('Por edad') && !Object.values(GRUPOS_EDAD).some(n => norm(n) === norm(c))) || null;
+        const precio = num(v.price);
+        filas.push({
+          id: `TN-${t.id}`,
+          proveedor: 'Tiendanube (importado)',
+          codigo: (v.sku || '').trim(),
+          nombre: extraerNombre(t),
+          precio_costo: null,
+          precio_publico: precio,
+          precio_venta: precio,
+          categoria: '',
+          categoria_sugerida: principal,
+          edad_grupos: gruposEdad,
+          descripcion: extraerDescripcion(t) || null,
+          imagenes: extraerImagenes(t),
+          tags: (t.tags || '').trim() || null,
+          peso: num(v.weight), ancho: num(v.width), alto: num(v.height), profundidad: num(v.depth),
+          stock: null,
+          tiendanube_product_id: t.id,
+          tiendanube_variant_id: v.id || null,
+          match_confianza: 1,
+          match_origen: 'importado',
+          validado: false,
+          manual: false,
+          updated_at: ahora,
+        });
+      }
+
+      let importados = 0;
+      if (aplicar) {
+        for (let i = 0; i < filas.length; i += 50) {
+          await sb('POST', 'proveedores', { body: filas.slice(i, i + 50), prefer: 'resolution=ignore-duplicates,return=minimal' });
+          importados += Math.min(50, filas.length - i);
+        }
+      }
+      ok(res, {
+        simulacion: !aplicar,
+        a_importar: filas.length,
+        importados,
+        omitidos_vinculados_o_en_cola: excluidos.size,
+        con_variantes_multiples: variantesMultiples,
+        sin_precio: filas.filter(f => !f.precio_venta).length,
+        sin_foto: filas.filter(f => !f.imagenes.length).length,
+        sin_descripcion: filas.filter(f => !f.descripcion).length,
+        sin_categoria: filas.filter(f => !f.categoria_sugerida).length,
+        ejemplo: filas.slice(0, 3).map(f => ({ id: f.id, nombre: f.nombre, precio_venta: f.precio_venta, categoria_sugerida: f.categoria_sugerida, edad_grupos: f.edad_grupos, fotos: f.imagenes.length })),
+      });
     } catch (e) { err(res, e.message); }
   });
 
