@@ -251,11 +251,12 @@ async function tn(method, path, body) {
 
 // Envía a Tiendanube el stock actual de un producto vinculado (el de la app manda).
 // - Stock vacío ("sin cargar"): no se toca nada en la tienda.
-// - Stock 0: la tienda queda con stock 0 (sin stock). No se borra la publicación ni se pierde el vínculo.
+// - Stock 0: la tienda queda con stock 0 y la publicación INACTIVA (oculta). No se borra ni se pierde el vínculo.
+// - Si vuelve a haber stock: se reactiva, solo si fue este sistema el que la desactivó.
 async function empujarStockTn(id) {
   if (!TIENDANUBE_ACCESS_TOKEN || !TIENDANUBE_STORE_ID) return;
   // Se lee el stock vigente en la base (no el del pedido), así si hubo varios cambios seguidos queda el último
-  const filas = await sb('GET', 'proveedores', { filter: `id=eq.${id}`, select: 'nombre,stock,tiendanube_product_id,tiendanube_variant_id' });
+  const filas = await sb('GET', 'proveedores', { filter: `id=eq.${id}`, select: 'nombre,stock,tiendanube_product_id,tiendanube_variant_id,tn_inactivo_por_stock' });
   const p = filas?.[0];
   if (!p || !p.tiendanube_product_id) return;
   if (p.stock === null || p.stock === undefined) return;
@@ -271,6 +272,16 @@ async function empujarStockTn(id) {
       await sb('PATCH', `proveedores?id=eq.${id}`, { body: { tiendanube_variant_id: variantId }, prefer: 'return=minimal' });
     }
     await tn('PUT', `/products/${p.tiendanube_product_id}/variants/${variantId}`, { stock });
+    if (stock === 0) {
+      const prodTn = await tn('GET', `/products/${p.tiendanube_product_id}`);
+      if (prodTn && prodTn.published !== false) {
+        await tn('PUT', `/products/${p.tiendanube_product_id}`, { published: false });
+        await sb('PATCH', `proveedores?id=eq.${id}`, { body: { tn_inactivo_por_stock: true }, prefer: 'return=minimal' });
+      }
+    } else if (p.tn_inactivo_por_stock) {
+      await tn('PUT', `/products/${p.tiendanube_product_id}`, { published: true });
+      await sb('PATCH', `proveedores?id=eq.${id}`, { body: { tn_inactivo_por_stock: false }, prefer: 'return=minimal' });
+    }
   };
   try { await intentar(); }
   catch (e) {
@@ -494,17 +505,38 @@ const iguales = (a, b) => Math.abs(Number(a) - Number(b)) < 0.005;
 // Compara un producto de la app contra Tiendanube y (si dryRun es false) aplica las diferencias.
 // - Precio, stock, medidas y categorías: siempre.
 // - Nombre y descripción: solo si se editaron en la app (tn_pendiente_texto), para no pisar los textos que ya tenés en la tienda.
-// - Sin stock: se da de baja.
+// - Sin stock (0): la publicación queda con stock 0 e INACTIVA (oculta). No se borra ni se pierde el vínculo.
+//   Al reponer, se reactiva sola, pero solo si fue este sistema el que la desactivó (no si la ocultaste vos a mano).
 async function actualizarProductoTn(p, catsTn, dryRun) {
   const out = { id: p.id, nombre: p.nombre, cambios: [], sospechoso: [], baja: false, error: null };
 
   const stockSinCargar = (p.stock === null || p.stock === undefined);
-  if (!stockSinCargar && Number(p.stock) <= 0) {
-    out.baja = true; out.cambios.push('dar de baja (sin stock)');
+  const sinStock = !stockSinCargar && Number(p.stock) <= 0;
+
+  if (sinStock) {
+    let prodS;
+    try { prodS = await tn('GET', `/products/${p.tiendanube_product_id}`); }
+    catch (e) {
+      if (/: 404 /.test(e.message)) {
+        out.error = 'ya no existe en Tiendanube (se limpia el vínculo)';
+        if (!dryRun) await sb('PATCH', `proveedores?id=eq.${p.id}`, { body: { tiendanube_product_id: null, tiendanube_variant_id: null }, prefer: 'return=minimal' });
+        return out;
+      }
+      throw e;
+    }
+    const varS = prodS?.variants?.[0];
+    if (!varS) { out.error = 'el producto no tiene variante en Tiendanube'; return out; }
+    const stockCambia = varS.stock === null || varS.stock === undefined || Number(varS.stock) !== 0;
+    const estabaActivo = prodS.published !== false;
+    if (stockCambia) out.cambios.push(`stock ${varS.stock ?? 'sin límite'} → 0`);
+    if (estabaActivo) out.cambios.push('desactivar publicación (sin stock; no se borra)');
     if (!dryRun) {
-      try { await tn('DELETE', `/products/${p.tiendanube_product_id}`); }
-      catch (e) { if (!/404/.test(e.message)) throw e; }
-      await sb('PATCH', `proveedores?id=eq.${p.id}`, { body: { tiendanube_product_id: null, tiendanube_variant_id: null, updated_at: new Date().toISOString() }, prefer: 'return=minimal' });
+      if (stockCambia) await tn('PUT', `/products/${p.tiendanube_product_id}/variants/${varS.id}`, { stock: 0 });
+      if (estabaActivo) await tn('PUT', `/products/${p.tiendanube_product_id}`, { published: false });
+      const localS = { updated_at: new Date().toISOString() };
+      if (!p.tiendanube_variant_id) localS.tiendanube_variant_id = varS.id;
+      if (estabaActivo) localS.tn_inactivo_por_stock = true;
+      await sb('PATCH', `proveedores?id=eq.${p.id}`, { body: localS, prefer: 'return=minimal' });
     }
     return out;
   }
@@ -570,10 +602,17 @@ async function actualizarProductoTn(p, catsTn, dryRun) {
     if (html && html.trim() !== (prod.description?.es || '').trim()) { cambioProducto.description = { es: html }; out.cambios.push('descripción'); }
   }
 
+  // Si el sistema la había desactivado por falta de stock y ahora hay stock: se reactiva
+  let reactivada = false;
+  if (!stockSinCargar && p.tn_inactivo_por_stock) {
+    if (prod.published === false) { cambioProducto.published = true; out.cambios.push('reactivar publicación (hay stock)'); reactivada = true; }
+  }
+
   if (!dryRun) {
     if (Object.keys(cambioVariante).length) await tn('PUT', `/products/${p.tiendanube_product_id}/variants/${variante.id}`, cambioVariante);
     if (Object.keys(cambioProducto).length) await tn('PUT', `/products/${p.tiendanube_product_id}`, cambioProducto);
     const local = { updated_at: new Date().toISOString() };
+    if (!stockSinCargar && p.tn_inactivo_por_stock && (reactivada || prod.published !== false)) local.tn_inactivo_por_stock = false;
     if (!p.tiendanube_variant_id) local.tiendanube_variant_id = variante.id;
     if (p.tn_pendiente_texto) local.tn_pendiente_texto = false;
     await sb('PATCH', `proveedores?id=eq.${p.id}`, { body: local, prefer: 'return=minimal' });
