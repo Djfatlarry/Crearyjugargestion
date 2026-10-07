@@ -136,8 +136,13 @@ module.exports = function registrarReconciliacionTiendanube(app, sb) {
         total: productos.length,
         productos: productos.map(t => {
           const v = (t.variants && t.variants[0]) || {};
+          const vars = t.variants || [];
+          const conNumero = vars.filter(x => x.stock !== null && x.stock !== undefined);
           return {
             id: t.id,
+            // Stock de toda la publicación en la tienda (suma de variantes). "ilimitado" = alguna variante sin control de stock.
+            stock_total: conNumero.reduce((a, x) => a + (Number(x.stock) || 0), 0),
+            ilimitado: vars.some(x => x.stock === null || x.stock === undefined),
             nombre: extraerNombre(t),
             sku: extraerSku(t),
             precio: Number(v.price) > 0 ? Number(v.price) : null,
