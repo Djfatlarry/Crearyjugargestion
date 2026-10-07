@@ -151,6 +151,8 @@ module.exports = function registrarReconciliacionTiendanube(app, sb) {
             variantes: (t.variants || []).length,
             url: t.canonical_url || null,
             foto: (t.images && t.images[0] && t.images[0].src) || null,
+            fotos: extraerImagenes(t),
+            descripcion: extraerDescripcion(t) || null,
             publicado: t.published !== false,
           };
         }),
