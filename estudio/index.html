@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Estudio Crear y Jugar</title>
+<meta name="theme-color" content="#8B80B6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Estudio">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --crema: #F3EAE0;
+    --papel: #FFFDF9;
+    --lavanda: #8B80B6;
+    --lavanda-osc: #6E63A3;
+    --tinta: #3F3468;
+    --tinta-suave: #6B6290;
+    --coral: #F28C6B;
+    --turquesa: #6EC5C9;
+    --amarillo: #F7D46B;
+    --verde: #A0CD82;
+    --rosa: #E878AA;
+    --borde: #E2D6C8;
+    --radio: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--crema);
+    color: var(--tinta);
+    font-family: 'Lexend', system-ui, sans-serif;
+    font-size: 19px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, textarea, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--lavanda-osc); outline-offset: 2px; }
+  .oculto { display: none !important; }
+
+  /* Franja arcoíris del logo */
+  .arcoiris { height: 6px; background: linear-gradient(90deg, var(--turquesa) 0 16.6%, #78AAD7 0 33.3%, var(--lavanda) 0 50%, var(--coral) 0 66.6%, var(--amarillo) 0 83.3%, var(--verde) 0); }
+
+  .app { display: flex; flex-direction: column; height: 100%; height: 100dvh; max-width: 760px; margin: 0 auto; }
+
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; padding-top: calc(10px + env(safe-area-inset-top));
+    background: var(--crema);
+  }
+  header img { width: 44px; height: 44px; }
+  header h1 { font-size: 20px; font-weight: 600; margin: 0; flex: 1; letter-spacing: -0.01em; }
+  header .quien { font-size: 15px; color: var(--tinta-suave); }
+  .icono-btn { background: none; border: 0; padding: 8px; border-radius: 10px; color: var(--tinta); }
+  .icono-btn:hover { background: #EADFD2; }
+
+  #charla { flex: 1; overflow-y: auto; padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+  #charla > * { flex-shrink: 0; }
+
+  .msg { max-width: 88%; padding: 12px 16px; border-radius: 18px; white-space: normal; overflow-wrap: anywhere; }
+  .msg p { margin: 0 0 8px; } .msg p:last-child { margin-bottom: 0; }
+  .msg ul, .msg ol { margin: 4px 0 8px; padding-left: 22px; }
+  .msg.asistente { align-self: flex-start; background: var(--papel); border: 1px solid var(--borde); border-bottom-left-radius: 6px; }
+  .msg.yo { align-self: flex-end; background: var(--lavanda-osc); color: #fff; border-bottom-right-radius: 6px; }
+  .msg.aviso { align-self: center; background: none; color: var(--tinta-suave); font-size: 16px; text-align: center; padding: 4px 8px; }
+  .msg.error { align-self: flex-start; background: #FCE9E2; border: 1px solid #F2C4B3; }
+
+  .pensando { display: inline-flex; gap: 6px; align-items: center; }
+  .pensando i { width: 9px; height: 9px; border-radius: 50%; background: var(--lavanda); animation: rebote 1s infinite ease-in-out; }
+  .pensando i:nth-child(2) { animation-delay: .15s; background: var(--coral); }
+  .pensando i:nth-child(3) { animation-delay: .3s; background: var(--turquesa); }
+  @keyframes rebote { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
+
+  /* Menú: bloques de juguete */
+  .bloques { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 4px 0 6px; }
+  @media (min-width: 620px) { .bloques { grid-template-columns: repeat(3, 1fr); } }
+  .bloque {
+    position: relative; text-align: left; border: 0; border-radius: var(--radio);
+    display: flex; flex-direction: column; justify-content: flex-start;
+    padding: 16px 14px 14px; min-height: 104px;
+    background: var(--c); color: var(--tinta);
+    box-shadow: 0 6px 0 var(--sombra);
+    transition: transform .08s, box-shadow .08s;
+  }
+  .bloque::before { /* los encastres del bloque */
+    content: ''; position: absolute; top: -7px; left: 22px; width: 20px; height: 9px; border-radius: 6px 6px 0 0;
+    background: var(--c); box-shadow: 30px 0 0 var(--c);
+  }
+  .bloque:active { transform: translateY(5px); box-shadow: 0 1px 0 var(--sombra); }
+  .bloque b { display: block; font-size: 18px; font-weight: 600; line-height: 1.25; margin-bottom: 4px; }
+  .bloque span { display: block; font-size: 14.5px; line-height: 1.35; opacity: .85; }
+  .b-turquesa { --c: var(--turquesa); --sombra: #4E9FA3; }
+  .b-coral { --c: var(--coral); --sombra: #CF6C4D; }
+  .b-amarillo { --c: var(--amarillo); --sombra: #D4AF45; }
+  .b-verde { --c: var(--verde); --sombra: #7FAE61; }
+  .b-rosa { --c: var(--rosa); --sombra: #C45689; }
+  .b-lavanda { --c: #B4ABDA; --sombra: var(--lavanda); }
+  .b-crema { --c: var(--papel); --sombra: var(--borde); }
+
+  /* Tarjetas de publicación */
+  .tarjeta { align-self: stretch; background: var(--papel); border: 1px solid var(--borde); border-radius: 18px; overflow: hidden; }
+  .tarjeta .estado { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: 16px; font-weight: 500; }
+  .tarjeta .estado::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--punto, var(--amarillo)); }
+  .tarjeta[data-estado="aprobado"] { --punto: var(--turquesa); }
+  .tarjeta[data-estado="publicado"] { --punto: var(--verde); }
+  .slides { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 0 16px; padding: 0 16px 4px; }
+  .slides img { width: 78%; max-width: 320px; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 10px; scroll-snap-align: start; background: #EEE4D8; flex: none; }
+  .tarjeta .texto { padding: 10px 16px 0; font-size: 16.5px; white-space: pre-line; }
+  .tarjeta .texto.corto { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .ver-mas { background: none; border: 0; padding: 4px 16px; color: var(--lavanda-osc); font-size: 15.5px; font-weight: 500; }
+  .acciones { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 16px 16px; }
+  .btn { border: 0; border-radius: 12px; padding: 12px 18px; font-weight: 600; font-size: 17px; }
+  .btn.principal { background: var(--tinta); color: #fff; }
+  .btn.secundario { background: #EADFD2; }
+  .btn.quieto { background: none; color: var(--tinta-suave); font-weight: 500; padding-left: 8px; padding-right: 8px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .cambios { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .cambios textarea { width: 100%; min-height: 84px; border: 1px solid var(--borde); border-radius: 12px; padding: 10px 12px; background: #fff; resize: vertical; }
+  .error-tarjeta { margin: 8px 16px 0; padding: 8px 12px; background: #FCE9E2; border-radius: 10px; font-size: 15px; }
+
+  /* Pie: menú + escribir */
+  footer { padding: 10px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); background: var(--crema); border-top: 1px solid var(--borde); }
+  .fila { display: flex; gap: 10px; align-items: flex-end; }
+  #entrada { flex: 1; min-height: 52px; max-height: 160px; border: 1px solid var(--borde); border-radius: 16px; padding: 12px 14px; background: #fff; resize: none; line-height: 1.4; }
+  #enviar { background: var(--tinta); color: #fff; border: 0; border-radius: 16px; padding: 0 20px; height: 52px; font-weight: 600; }
+  #enviar:disabled { opacity: .45; }
+  #abrir-menu { background: none; border: 0; color: var(--lavanda-osc); font-weight: 600; font-size: 16px; padding: 0 2px 8px; }
+
+  /* Ingreso */
+  .ingreso { flex: 1; overflow-y: auto; padding: 32px 20px; display: flex; flex-direction: column; gap: 20px; }
+  .ingreso img { width: 132px; height: 132px; align-self: center; }
+  .ingreso h2 { font-size: 30px; line-height: 1.15; margin: 0; font-weight: 700; text-align: center; letter-spacing: -0.02em; }
+  .ingreso p { margin: 0; text-align: center; color: var(--tinta-suave); }
+  .personas { display: grid; gap: 12px; }
+  .persona { border: 2px solid var(--borde); background: var(--papel); border-radius: 16px; padding: 16px; font-size: 20px; font-weight: 600; text-align: left; }
+  .persona[aria-pressed="true"] { border-color: var(--lavanda-osc); background: #EEEAF8; }
+  label { display: block; font-weight: 500; margin-bottom: 6px; }
+  .campo { width: 100%; border: 1px solid var(--borde); border-radius: 12px; padding: 12px 14px; background: #fff; }
+  details summary { cursor: pointer; color: var(--tinta-suave); font-size: 16px; }
+
+  /* Panel de opciones */
+  .panel { position: fixed; inset: 0; background: rgba(63, 52, 104, .35); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }
+  .panel > div { background: var(--crema); width: 100%; max-width: 760px; border-radius: 20px 20px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; }
+  .panel .btn { text-align: left; }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="arcoiris" aria-hidden="true"></div>
+
+  <!-- Ingreso (primera vez) -->
+  <section id="vista-ingreso" class="ingreso oculto" aria-labelledby="t-ingreso">
+    <img src="logo.png" alt="Crear y Jugar">
+    <h2 id="t-ingreso">Estudio Crear y Jugar</h2>
+    <p>Tu asistente para crear las publicaciones del negocio.</p>
+    <div>
+      <label id="l-quien">¿Quién sos?</label>
+      <div class="personas" role="group" aria-labelledby="l-quien">
+        <button class="persona" type="button" data-nombre="María Elena">María Elena</button>
+        <button class="persona" type="button" data-nombre="Carlos">Carlos</button>
+        <button class="persona" type="button" data-nombre="Pablo">Pablo</button>
+      </div>
+    </div>
+    <div>
+      <label for="clave">Clave de acceso</label>
+      <input id="clave" class="campo" type="password" autocomplete="current-password" placeholder="La misma del agente de Instagram">
+    </div>
+    <details>
+      <summary>Opciones avanzadas</summary>
+      <div style="margin-top:10px">
+        <label for="servidor">Dirección del servidor</label>
+        <input id="servidor" class="campo" type="url" inputmode="url">
+      </div>
+    </details>
+    <p id="error-ingreso" class="oculto" role="alert" style="color:#B04A2A"></p>
+    <button id="entrar" class="btn principal" type="button">Entrar</button>
+  </section>
+
+  <!-- Charla -->
+  <section id="vista-charla" class="oculto" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <header>
+      <img src="logo.png" alt="">
+      <div style="flex:1">
+        <h1>Estudio</h1>
+        <div class="quien" id="quien"></div>
+      </div>
+      <button class="icono-btn" id="opciones" type="button" aria-label="Opciones">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>
+      </button>
+    </header>
+    <main id="charla" aria-live="polite"></main>
+    <footer>
+      <button id="abrir-menu" type="button">Ver opciones</button>
+      <div class="fila">
+        <textarea id="entrada" rows="1" placeholder="Escribí acá…" aria-label="Mensaje"></textarea>
+        <button id="enviar" type="button">Enviar</button>
+      </div>
+    </footer>
+  </section>
+</div>
+
+<div id="panel" class="panel oculto" role="dialog" aria-modal="true" aria-label="Opciones">
+  <div>
+    <button class="btn secundario" type="button" id="op-borrar">Empezar una charla nueva</button>
+    <button class="btn secundario" type="button" id="op-usuario">Cambiar de persona</button>
+    <button class="btn quieto" type="button" id="op-cerrar">Cerrar</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const SERVIDOR_DEFAULT = 'https://crearyjugargestion.onrender.com';
+
+  // Cada bloque del menú manda un pedido en palabras al asistente
+  const MENU = [
+    { titulo: 'Publicación del día', detalle: 'Según el calendario de hoy', color: 'turquesa', pedido: 'Armá la publicación de hoy según el calendario.' },
+    { titulo: 'Publicaciones de la semana', detalle: 'Todas juntas para aprobar', color: 'lavanda', pedido: 'Armá las publicaciones de la semana.' },
+    { titulo: 'Reel de productos', detalle: 'Qué filmar, toma por toma', color: 'coral', pedido: 'Quiero hacer un reel de productos. Proponeme uno con la lista de tomas.' },
+    { titulo: 'Reel de promoción', detalle: 'Para una oferta o descuento', color: 'amarillo', pedido: 'Quiero hacer un reel de promoción. Proponeme uno con la lista de tomas.' },
+    { titulo: 'Video institucional', detalle: 'Historia, filosofía, el local', color: 'verde', pedido: 'Quiero preparar un video institucional. Proponeme un tema, qué decir y qué filmar.' },
+    { titulo: 'Dame ideas', detalle: 'Tres ideas para esta semana', color: 'rosa', pedido: 'Dame ideas de contenido para esta semana.' },
+    { titulo: 'Para aprobar', detalle: 'Lo que espera tu visto bueno', color: 'crema', pedido: 'Mostrame las publicaciones que esperan aprobación.' },
+  ];
+
+  const $ = (s) => document.querySelector(s);
+  const guardar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+  const leer = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
+
+  const cfg = leer('estudio_cfg', { servidor: SERVIDOR_DEFAULT, clave: '', usuario: '' });
+  let historial = [];   // [{ role, content, tarjetas? }]
+  let ocupado = false;
+
+  const claveHist = () => `estudio_hist_${cfg.usuario}`;
+  const guardarHist = () => guardar(claveHist(), historial.slice(-60));
+
+  async function api(ruta, { metodo = 'GET', body } = {}) {
+    const r = await fetch(cfg.servidor.replace(/\/$/, '') + ruta, {
+      method: metodo,
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': cfg.clave },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.status === 401) throw new Error('La clave no es correcta. Revisala en "Cambiar de persona".');
+    if (!r.ok || data.ok === false) throw new Error(data.error || 'No pude conectarme con el servidor. Revisá la conexión y probá de nuevo.');
+    return data;
+  }
+
+  // --- Texto: escapar y dar un formato mínimo (negritas, listas, párrafos) ---
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function formato(texto) {
+    const lineas = esc(texto).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').split('\n');
+    let html = '', lista = null;
+    for (const l of lineas) {
+      const m = l.match(/^\s*(?:[-•*]|(\d+)[.)])\s+(.*)$/);
+      if (m) {
+        const tipo = m[1] ? 'ol' : 'ul';
+        if (lista !== tipo) { if (lista) html += `</${lista}>`; html += `<${tipo}>`; lista = tipo; }
+        html += `<li>${m[2]}</li>`;
+      } else {
+        if (lista) { html += `</${lista}>`; lista = null; }
+        if (l.trim()) html += `<p>${l}</p>`;
+      }
+    }
+    if (lista) html += `</${lista}>`;
+    return html;
+  }
+
+  // --- Dibujar ---
+  const charla = () => $('#charla');
+  const alFinal = () => { const c = charla(); c.scrollTop = c.scrollHeight; };
+
+  function burbuja(clase, html) {
+    const d = document.createElement('div');
+    d.className = `msg ${clase}`;
+    d.innerHTML = html;
+    charla().appendChild(d);
+    return d;
+  }
+
+  function dibujarMenu() {
+    const g = document.createElement('div');
+    g.className = 'bloques';
+    for (const m of MENU) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `bloque b-${m.color}`;
+      b.innerHTML = `<b>${esc(m.titulo)}</b><span>${esc(m.detalle)}</span>`;
+      b.addEventListener('click', () => enviar(m.pedido));
+      g.appendChild(b);
+    }
+    charla().appendChild(g);
+    return g;
+  }
+
+  function textoEstado(t) {
+    if (t.estado === 'publicado') return 'Publicada';
+    if (t.estado === 'aprobado') return t.programado_legible ? `Aprobada · sale el ${t.programado_legible}` : 'Aprobada · sin fecha asignada';
+    return 'Esperando tu aprobación';
+  }
+
+  function dibujarTarjeta(t, contenedor) {
+    const d = document.createElement('article');
+    d.className = 'tarjeta';
+    d.dataset.estado = t.estado;
+    d.innerHTML = `
+      <div class="estado">${esc(textoEstado(t))}</div>
+      <div class="slides">${(t.slides || []).map((u, i) => `<img src="${esc(u)}" alt="Imagen ${i + 1} de la publicación" loading="lazy">`).join('')}</div>
+      ${t.error ? `<div class="error-tarjeta">No se pudo publicar: ${esc(t.error)}</div>` : ''}
+      <div class="texto corto">${esc(t.caption || '')}</div>
+      ${t.caption && t.caption.length > 140 ? '<button class="ver-mas" type="button">Ver texto completo</button>' : ''}
+      <div class="acciones"></div>
+      <div class="cambios oculto">
+        <label>¿Qué le cambio?<textarea placeholder="Por ejemplo: más alegre, sacá el precio, otra foto"></textarea></label>
+        <div class="fila"><button class="btn principal" type="button" data-a="mandar-cambios">Pedir cambios</button><button class="btn quieto" type="button" data-a="cancelar">Cancelar</button></div>
+      </div>`;
+    const acciones = d.querySelector('.acciones');
+    if (t.estado === 'borrador') {
+      acciones.innerHTML = `<button class="btn principal" type="button" data-a="aprobar">Aprobar</button>
+        <button class="btn secundario" type="button" data-a="cambios">Pedir cambios</button>
+        <button class="btn quieto" type="button" data-a="descartar">Descartar</button>`;
+    } else if (t.estado === 'aprobado') {
+      acciones.innerHTML = `<button class="btn secundario" type="button" data-a="cambios">Pedir cambios</button>`;
+    }
+    const verMas = d.querySelector('.ver-mas');
+    if (verMas) verMas.addEventListener('click', () => {
+      const tx = d.querySelector('.texto'); const corto = tx.classList.toggle('corto');
+      verMas.textContent = corto ? 'Ver texto completo' : 'Ver menos';
+    });
+    d.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-a]')?.dataset.a;
+      if (a) accionTarjeta(a, t, d);
+    });
+    (contenedor || charla()).appendChild(d);
+    return d;
+  }
+
+  async function accionTarjeta(accion, t, el) {
+    const panel = el.querySelector('.cambios');
+    if (accion === 'cambios') { panel.classList.remove('oculto'); panel.querySelector('textarea').focus(); return; }
+    if (accion === 'cancelar') { panel.classList.add('oculto'); return; }
+    if (accion === 'descartar' && !confirm('¿Descartar esta publicación? No se puede recuperar.')) return;
+    const botones = el.querySelectorAll('button');
+    botones.forEach((b) => (b.disabled = true));
+    try {
+      if (accion === 'aprobar') {
+        const r = await api(`/estudio/piezas/${encodeURIComponent(t.id)}/aprobar`, { metodo: 'POST' });
+        const nueva = dibujarTarjeta(r.tarjeta, document.createElement('div'));
+        el.replaceWith(nueva);
+        let txt = r.tarjeta.programado_legible ? `Aprobada. Sale el ${r.tarjeta.programado_legible}.` : 'Aprobada. Todavía no tiene fecha: pedime que la programe.';
+        if (!r.instagram_conectado) txt += ' (Instagram no está conectado: avisale a Pablo.)';
+        anotar('aviso', txt);
+      } else if (accion === 'descartar') {
+        await api(`/estudio/piezas/${encodeURIComponent(t.id)}`, { metodo: 'DELETE' });
+        el.remove();
+        anotar('aviso', 'Publicación descartada.');
+      } else if (accion === 'mandar-cambios') {
+        const pedido = panel.querySelector('textarea').value.trim();
+        if (!pedido) { botones.forEach((b) => (b.disabled = false)); return; }
+        panel.classList.add('oculto');
+        const espera = burbuja('asistente', '<span class="pensando" aria-label="Haciendo los cambios"><i></i><i></i><i></i></span> Haciendo los cambios, tarda cerca de un minuto…');
+        alFinal();
+        try {
+          const r = await api(`/estudio/piezas/${encodeURIComponent(t.id)}/cambios`, { metodo: 'POST', body: { pedido } });
+          espera.remove();
+          el.replaceWith(dibujarTarjeta(r.tarjeta, document.createElement('div')));
+          anotar('aviso', 'Listo, ya está con los cambios.');
+        } catch (e) { espera.remove(); throw e; }
+      }
+    } catch (e) {
+      botones.forEach((b) => (b.disabled = false));
+      anotar('error', e.message);
+    }
+  }
+
+  function anotar(clase, texto) {
+    burbuja(clase, formato(texto));
+    alFinal();
+  }
+
+  function dibujarHistorial() {
+    for (const m of historial) {
+      if (m.role === 'user') burbuja('yo', formato(m.content));
+      else {
+        burbuja('asistente', formato(m.content));
+        (m.tarjetas || []).forEach((t) => dibujarTarjeta(t));
+      }
+    }
+  }
+
+  // --- Conversar ---
+  async function enviar(texto) {
+    texto = String(texto || '').trim();
+    if (!texto || ocupado) return;
+    ocupado = true;
+    $('#enviar').disabled = true;
+    historial.push({ role: 'user', content: texto });
+    guardarHist();
+    burbuja('yo', formato(texto));
+    const lento = /armá|crea|hac[eé]|publicaci/i.test(texto);
+    const espera = burbuja('asistente', `<span class="pensando" aria-label="Pensando"><i></i><i></i><i></i></span>${lento ? ' Si tengo que armar publicaciones, tarda cerca de un minuto cada una…' : ''}`);
+    alFinal();
+    try {
+      const r = await api('/estudio/chat', {
+        metodo: 'POST',
+        body: { usuario: cfg.usuario, mensajes: historial.map((m) => ({ role: m.role, content: m.content })) },
+      });
+      espera.remove();
+      historial.push({ role: 'assistant', content: r.texto, tarjetas: r.tarjetas || [] });
+      guardarHist();
+      burbuja('asistente', formato(r.texto));
+      (r.tarjetas || []).forEach((t) => dibujarTarjeta(t));
+    } catch (e) {
+      espera.remove();
+      historial.pop();
+      guardarHist();
+      anotar('error', e.message);
+    } finally {
+      ocupado = false;
+      $('#enviar').disabled = false;
+      alFinal();
+    }
+  }
+
+  async function iniciar() {
+    $('#quien').textContent = cfg.usuario;
+    charla().innerHTML = '';
+    historial = leer(claveHist(), []);
+    if (historial.length) {
+      dibujarHistorial();
+      burbuja('aviso', '— Hoy —');
+    }
+    const espera = burbuja('asistente', '<span class="pensando" aria-label="Cargando"><i></i><i></i><i></i></span>');
+    try {
+      const r = await api(`/estudio/inicio?usuario=${encodeURIComponent(cfg.usuario)}`);
+      espera.innerHTML = formato(r.saludo);
+      dibujarMenu();
+      if (r.pendientes?.length) {
+        anotar('aviso', r.pendientes.length === 1 ? 'Esta espera tu aprobación:' : 'Estas esperan tu aprobación:');
+        r.pendientes.forEach((t) => dibujarTarjeta(t));
+      }
+    } catch (e) {
+      espera.className = 'msg error';
+      espera.innerHTML = formato(e.message);
+      dibujarMenu();
+    }
+    alFinal();
+  }
+
+  // --- Ingreso ---
+  function mostrar(vista) {
+    $('#vista-ingreso').classList.toggle('oculto', vista !== 'ingreso');
+    $('#vista-charla').classList.toggle('oculto', vista !== 'charla');
+  }
+
+  function abrirIngreso() {
+    $('#servidor').value = cfg.servidor || SERVIDOR_DEFAULT;
+    $('#clave').value = cfg.clave || '';
+    document.querySelectorAll('.persona').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.nombre === cfg.usuario)));
+    mostrar('ingreso');
+  }
+
+  document.querySelectorAll('.persona').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.persona').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+    b.setAttribute('aria-pressed', 'true');
+  }));
+
+  $('#entrar').addEventListener('click', async () => {
+    const elegido = document.querySelector('.persona[aria-pressed="true"]');
+    const error = $('#error-ingreso');
+    const nuevo = { servidor: ($('#servidor').value || SERVIDOR_DEFAULT).trim(), clave: $('#clave').value.trim(), usuario: elegido?.dataset.nombre || '' };
+    const falta = !nuevo.usuario ? 'Elegí quién sos.' : !nuevo.clave ? 'Escribí la clave de acceso.' : '';
+    if (falta) { error.textContent = falta; error.classList.remove('oculto'); return; }
+    error.classList.add('oculto');
+    Object.assign(cfg, nuevo);
+    guardar('estudio_cfg', cfg);
+    mostrar('charla');
+    iniciar();
+  });
+
+  // --- Escribir ---
+  const entrada = $('#entrada');
+  entrada.addEventListener('input', () => { entrada.style.height = 'auto'; entrada.style.height = Math.min(entrada.scrollHeight, 160) + 'px'; });
+  entrada.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(min-width: 700px)').matches) { e.preventDefault(); $('#enviar').click(); }
+  });
+  $('#enviar').addEventListener('click', () => { const t = entrada.value; entrada.value = ''; entrada.style.height = 'auto'; enviar(t); });
+  $('#abrir-menu').addEventListener('click', () => { dibujarMenu(); alFinal(); });
+
+  // --- Opciones ---
+  const panel = $('#panel');
+  $('#opciones').addEventListener('click', () => panel.classList.remove('oculto'));
+  $('#op-cerrar').addEventListener('click', () => panel.classList.add('oculto'));
+  panel.addEventListener('click', (e) => { if (e.target === panel) panel.classList.add('oculto'); });
+  $('#op-borrar').addEventListener('click', () => { historial = []; guardarHist(); panel.classList.add('oculto'); iniciar(); });
+  $('#op-usuario').addEventListener('click', () => { panel.classList.add('oculto'); abrirIngreso(); });
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+  if (cfg.clave && cfg.usuario) { mostrar('charla'); iniciar(); } else abrirIngreso();
+})();
+</script>
+</body>
+</html>

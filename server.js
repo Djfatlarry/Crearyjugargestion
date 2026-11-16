@@ -8,6 +8,7 @@ const registrarReconciliacionTiendanube = require('./tiendanube-reconciliacion')
 const registrarAuthTiendanube = require('./auth-tiendanube');
 const registrarInstagramAgente = require('./instagram-agente');
 const registrarPedidosTiendanube = require('./tiendanube-pedidos');
+const registrarEstudio = require('./estudio');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 } }); // 40MB, algunas listas traen imágenes incrustadas
 
@@ -1012,6 +1013,7 @@ app.post('/admin/reload-catalog', async (_, res) => {
 
 registrarReconciliacionTiendanube(app, sb);
 registrarInstagramAgente(app, sb, llamarClaude);
+registrarEstudio(app, sb, { puerto: process.env.PORT || 3001 });
 registrarAuthTiendanube(app);
 registrarPedidosTiendanube(app, { sb, tn, empujarStockTn });
 
