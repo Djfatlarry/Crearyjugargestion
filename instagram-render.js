@@ -317,6 +317,19 @@ const TEMAS = {
   },
 };
 
+// Variantes: las mismas plantillas con los colores repartidos distinto, para que dos publicaciones
+// seguidas no se vean iguales. El agente elige una que no se haya usado en las últimas publicaciones.
+const conPaneles = (base, colores) => Object.fromEntries(Object.entries(base).map(([slide, v]) => [
+  slide, colores[slide] && v.panel ? { ...v, panel: { ...v.panel, color: colores[slide] } } : v,
+]));
+TEMAS['panel-durazno'] = conPaneles(TEMAS.panel, { portada: COLORES.durazno, detalle: COLORES.menta, cierre: COLORES.manteca });
+TEMAS['panel-manteca'] = conPaneles(TEMAS.panel, { portada: COLORES.manteca, detalle: COLORES.durazno, cierre: COLORES.durazno });
+TEMAS['color-manteca'] = {
+  portada: { ...TEMAS.color.portada },
+  detalle: { ...TEMAS.color.detalle, fondo: COLORES.manteca, manchas: ['#FFF7D6', '#F5E39A'] },
+  desarrolla: { ...TEMAS.color.desarrolla, fondo: COLORES.menta, manchas: ['#CFECE8', '#A6D6CF'] },
+};
+
 const TEMA_DEFAULT = 'panel';
 
 function temaDe(d, slide) {
@@ -561,7 +574,16 @@ function lineaIcono(tipo, texto, color, tam = 30) {
 
 // Portada del carrusel de varios productos: tema del carrusel y las fotos en círculos de colores
 // d: { titulo, subtitulo, etiqueta?, fotos: [hasta 3 URLs] }
+// Fondos posibles de la portada de varios productos (d.variante elige uno)
+const PORTADAS_MULTI = [
+  { fondo: COLORES.lavanda, texto: COLORES.blanco, manchas: ['#9D92C5', '#8174AE'], etiqueta: 'rgba(255,255,255,0.18)' },
+  { fondo: COLORES.violeta, texto: COLORES.blanco, manchas: ['#5E5379', '#665B82'], etiqueta: 'rgba(255,255,255,0.14)' },
+  { fondo: COLORES.menta, texto: COLORES.violeta, manchas: ['#CFECE8', '#A6D6CF'], etiqueta: 'rgba(82,72,108,0.10)' },
+  { fondo: COLORES.durazno, texto: COLORES.violeta, manchas: ['#FBE4D9', '#EFC1AB'], etiqueta: 'rgba(82,72,108,0.10)' },
+];
+
 async function multiPortada(d) {
+  const v = PORTADAS_MULTI[(d.variante || 0) % PORTADAS_MULTI.length];
   const fotos = (d.fotos || []).slice(0, 3).map(refImagen);
   const circulos = [
     { tam: 470, left: 0, top: 70, aro: COLORES.menta },
@@ -569,19 +591,19 @@ async function multiPortada(d) {
     { tam: 330, left: 450, top: 360, aro: COLORES.manteca },
   ];
   return h('div', {
-    width: W, height: H, backgroundColor: COLORES.lavanda, flexDirection: 'column',
-    padding: '72px 72px 56px', color: COLORES.blanco, fontFamily: 'Lexend', position: 'relative',
+    width: W, height: H, backgroundColor: v.fondo, flexDirection: 'column',
+    padding: '72px 72px 56px', color: v.texto, fontFamily: 'Lexend', position: 'relative',
   },
     capaSvg([
-      mancha(1060, 90, 250, [1, 0.85, 1.1, 0.95, 1.2, 0.9, 1, 0.8], '#9D92C5'),
-      mancha(20, 1290, 270, [1.1, 0.9, 1, 1.15, 0.85, 1, 0.9, 1.05], '#8174AE'),
+      mancha(1060, 90, 250, [1, 0.85, 1.1, 0.95, 1.2, 0.9, 1, 0.8], v.manchas[0]),
+      mancha(20, 1290, 270, [1.1, 0.9, 1, 1.15, 0.85, 1, 0.9, 1.05], v.manchas[1]),
       iconoSvg('chispa', 930, 330, 34, COLORES.manteca, 0),
       iconoSvg('estrella', 80, 610, 30, COLORES.menta, 12),
       iconoSvg('corazon', 980, 1040, 30, COLORES.durazno, -10),
       iconoSvg('chispa', 1000, 640, 24, COLORES.blanco, 0),
     ]),
     h('div', {},
-      pastilla(d.etiqueta || 'JUEGOS QUE ENSEÑAN', { fondo: 'rgba(255,255,255,0.18)', color: COLORES.blanco, tam: 24, peso: 600, padY: 10, padX: 24 })),
+      pastilla(d.etiqueta || 'JUEGOS QUE ENSEÑAN', { fondo: v.etiqueta, color: v.texto, tam: 24, peso: 600, padY: 10, padX: 24 })),
     h('div', { marginTop: 28, fontFamily: 'Playfair Display', fontWeight: 800, fontSize: d.titulo.length > 28 ? 84 : 100, lineHeight: 1.02, maxWidth: 900 }, d.titulo),
     d.subtitulo ? h('div', { marginTop: 22, fontSize: 34, lineHeight: 1.4, maxWidth: 820, opacity: 0.92 }, d.subtitulo) : null,
     // Fotos en círculos superpuestos
@@ -595,7 +617,7 @@ async function multiPortada(d) {
       }),
     ),
     h('div', { justifyContent: 'space-between', alignItems: 'flex-end' },
-      h('div', { alignItems: 'center', gap: 12, fontSize: 30, fontWeight: 600, paddingBottom: 30 }, h('div', {}, 'Deslizá'), icono('flecha', 34, COLORES.blanco)),
+      h('div', { alignItems: 'center', gap: 12, fontSize: 30, fontWeight: 600, paddingBottom: 30 }, h('div', {}, 'Deslizá'), icono('flecha', 34, v.texto)),
       logoConAro(130),
     ),
   );
@@ -649,30 +671,39 @@ async function productoImagen(d) {
 
 // Institucional: frase de la marca, texto y datos del local
 // d: { frase, texto }
+// Paletas de la institucional (d.paleta elige una)
+const PALETAS_INSTITUCIONAL = [
+  { fondo: COLORES.violeta, texto: COLORES.blanco, frase: COLORES.manteca, datos: COLORES.menta, mancha: '#5E5379', iconos: [COLORES.manteca, COLORES.menta, COLORES.durazno] },
+  { fondo: COLORES.lavanda, texto: COLORES.blanco, frase: COLORES.blanco, datos: COLORES.manteca, mancha: '#9D92C5', iconos: [COLORES.manteca, COLORES.menta, COLORES.durazno] },
+  { fondo: COLORES.menta, texto: COLORES.violeta, frase: COLORES.violeta, datos: '#6B5FA0', mancha: '#CFECE8', iconos: [COLORES.lavanda, '#F2B8A0', COLORES.blanco] },
+  { fondo: COLORES.durazno, texto: COLORES.violeta, frase: COLORES.violeta, datos: '#6B5FA0', mancha: '#FBE4D9', iconos: [COLORES.lavanda, COLORES.blanco, '#8CCFC6'] },
+];
+
 async function institucional(d) {
+  const p = PALETAS_INSTITUCIONAL[(d.paleta || 0) % PALETAS_INSTITUCIONAL.length];
   return h('div', {
-    width: W, height: H, backgroundColor: COLORES.violeta, flexDirection: 'column',
-    padding: '96px 84px 64px', color: COLORES.blanco, fontFamily: 'Lexend', position: 'relative',
+    width: W, height: H, backgroundColor: p.fondo, flexDirection: 'column',
+    padding: '96px 84px 64px', color: p.texto, fontFamily: 'Lexend', position: 'relative',
   },
     capaSvg([
-      mancha(1080, 60, 280, [1, 0.85, 1.1, 0.95, 1.2, 0.9, 1, 0.8], '#5E5379'),
-      mancha(0, 1330, 300, [1.1, 0.9, 1, 1.15, 0.85, 1, 0.9, 1.05], '#5E5379'),
-      iconoSvg('chispa', 940, 380, 32, COLORES.manteca, 0),
-      iconoSvg('estrella', 180, 1020, 26, COLORES.menta, 10),
-      iconoSvg('corazon', 900, 1000, 26, COLORES.durazno, -8),
+      mancha(1080, 60, 280, [1, 0.85, 1.1, 0.95, 1.2, 0.9, 1, 0.8], p.mancha),
+      mancha(0, 1330, 300, [1.1, 0.9, 1, 1.15, 0.85, 1, 0.9, 1.05], p.mancha),
+      iconoSvg('chispa', 940, 380, 32, p.iconos[0], 0),
+      iconoSvg('estrella', 180, 1020, 26, p.iconos[1], 10),
+      iconoSvg('corazon', 900, 1000, 26, p.iconos[2], -8),
     ]),
     h('div', { flexGrow: 1 }),
-    h('div', { fontFamily: 'Playfair Display', fontWeight: 700, fontSize: 220, lineHeight: 0.8, color: COLORES.manteca, opacity: 0.5, height: 130 }, '“'),
+    h('div', { fontFamily: 'Playfair Display', fontWeight: 700, fontSize: 220, lineHeight: 0.8, color: p.frase, opacity: 0.5, height: 130 }, '“'),
     h('div', {
       fontFamily: 'Playfair Display', fontStyle: 'italic', fontWeight: 400, fontSize: d.frase.length > 60 ? 76 : 92,
-      lineHeight: 1.15, color: COLORES.manteca, maxWidth: 900, marginTop: 10,
+      lineHeight: 1.15, color: p.frase, maxWidth: 900, marginTop: 10,
     }, d.frase),
     d.texto ? h('div', { marginTop: 48, fontSize: 34, lineHeight: 1.5, maxWidth: 860, opacity: 0.95 }, d.texto) : null,
     h('div', { flexGrow: 1 }),
     h('div', { justifyContent: 'space-between', alignItems: 'flex-end' },
       h('div', { flexDirection: 'column', gap: 14, paddingBottom: 10 },
-        lineaIcono('pin', DIRECCION_LOCAL, COLORES.menta, 30),
-        h('div', { fontSize: 30, fontWeight: 600, color: COLORES.menta }, USUARIO_IG)),
+        lineaIcono('pin', DIRECCION_LOCAL, p.datos, 30),
+        h('div', { fontSize: 30, fontWeight: 600, color: p.datos }, USUARIO_IG)),
       logoConAro(140),
     ),
   );
@@ -815,4 +846,7 @@ async function renderizar(plantilla, datos) {
   return renderHtml(await htmlDePlantilla(plantilla, datos));
 }
 
-module.exports = { renderizar, htmlDePlantilla, renderHtml, COLORES, W, H };
+module.exports = {
+  renderizar, htmlDePlantilla, renderHtml, COLORES, W, H,
+  TEMAS_DISPONIBLES: Object.keys(TEMAS), VARIANTES_MULTI: PORTADAS_MULTI.length, PALETAS_INSTITUCIONAL: PALETAS_INSTITUCIONAL.length,
+};

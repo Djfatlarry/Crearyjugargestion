@@ -16,8 +16,10 @@ App instalable (ícono en la PC y en el celular) para que María Elena, Carlos y
 ## Qué hace (etapa 1, primera tanda)
 
 - Saludo del día con lo que toca según el calendario y lo que espera aprobación.
-- Menú de bloques: publicación del día, de la semana, reels (guion y lista de tomas), video institucional, ideas, pendientes.
-- Tarjetas con Aprobar / Pedir cambios / Descartar. Al aprobar, si no tiene fecha, la agenda en el próximo horario libre del agente.
+- Dos pestañas: **Crear** (saludo y bloques) y **Para aprobar** (publicaciones pendientes y ya programadas).
+- Cada bloque abre su propio proceso con su charla aparte (publicación del día, de la semana, reels, video institucional, ideas, charla libre). La del día empieza de cero cada día.
+- Lo que se arma en una charla queda en Para aprobar, con Aprobar / Pedir cambios / Descartar. Al aprobar, si no tiene fecha, se agenda en el próximo horario libre del agente.
+- Colores: cada publicación nueva usa una combinación de fondos distinta de las últimas (6 temas para un producto, 4 portadas para varios productos, 4 paletas para institucionales).
 - El backend está en `estudio.js` (rutas `/estudio/*`) y usa las rutas del agente de Instagram por dentro.
 
 Pendiente para la segunda tanda: notificaciones al celular y saludo programado a las 10:00.

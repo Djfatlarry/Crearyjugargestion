@@ -1,6 +1,6 @@
 // Service worker mínimo: permite instalar la app y abrirla sin conexión (muestra la última versión).
 // Las llamadas al servidor nunca se guardan en caché.
-const CACHE = 'estudio-v1';
+const CACHE = 'estudio-v2';
 const ARCHIVOS = ['./', './index.html', './manifest.webmanifest', './logo.png', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
