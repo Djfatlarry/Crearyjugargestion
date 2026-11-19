@@ -16,7 +16,8 @@
 //   SUPABASE_URL, SUPABASE_KEY   (las mismas del backend; la key tiene que poder escribir en Storage)
 //   ANTHROPIC_API_KEY            (la usa llamarClaude en server.js)
 //   IG_BUCKET                    bucket público de Storage (default 'instagram')
-//   IG_TEMA                      tema de color por defecto: 'panel' | 'color' | 'crema' (default 'panel')
+//   IG_TEMA                      tema de respaldo para ediciones de borradores viejos sin tema (default 'panel').
+//                                Las publicaciones nuevas eligen solas un tema distinto de los últimos usados.
 //   IG_RECORTE                   'ninguno' (default) | 'removebg'
 //   REMOVEBG_API_KEY             si IG_RECORTE=removebg
 //   IG_ACCESS_TOKEN              token de la cuenta profesional de Instagram (para publicar). Si es un token de
@@ -29,7 +30,7 @@
 
 const crypto = require('crypto');
 const sharp = require('sharp');
-const { htmlDePlantilla, renderHtml } = require('./instagram-render');
+const { htmlDePlantilla, renderHtml, TEMAS_DISPONIBLES, VARIANTES_MULTI, PALETAS_INSTITUCIONAL } = require('./instagram-render');
 
 const BUCKET = process.env.IG_BUCKET || 'instagram';
 const TEMA = process.env.IG_TEMA || 'panel';
@@ -217,7 +218,24 @@ const SLIDES_UNICO = { portada: 'unico_portada', detalle: 'unico_detalle', desar
 const SLIDES_UNICO_DEFAULT = ['portada', 'detalle', 'desarrolla', 'cierre'];
 // Sonnet 5: buen equilibrio entre calidad de diseño y costo por mensaje (Opus 5 es más fino y ~2,5x más caro)
 const MODELO_DISENO = 'claude-sonnet-5';
-const TEMAS_UNICO = ['panel', 'color', 'crema'];
+const TEMAS_UNICO = TEMAS_DISPONIBLES;
+
+// Variedad sin que nadie tenga que pedirla: cada publicación nueva usa colores distintos de los de las
+// últimas publicaciones del mismo tipo (se guardan en `tema` o en el contenido del borrador).
+function elegirDistinto(opciones, recientes) {
+  const libres = opciones.filter((o) => !recientes.includes(o));
+  const lista = libres.length ? libres : opciones;
+  return lista[Math.floor(Math.random() * lista.length)];
+}
+
+async function recientesDe(sb, tipo, campo, n = 3) {
+  const filas = await sb('GET', 'publicaciones_borrador', { select: 'tema,contenido', filter: `tipo=eq.${tipo}`, order: 'created_at.desc', limit: n - 1 }) || [];
+  return filas.map((f) => (campo === 'tema' ? f.tema : f.contenido?.[campo]));
+}
+
+async function elegirTema(sb) {
+  return elegirDistinto(TEMAS_UNICO, await recientesDe(sb, 'unico', 'tema', 4));
+}
 
 async function buscarProducto(sb, id) {
   const r = await sb('GET', 'proveedores', { select: 'id,nombre,descripcion,categoria,categoria_grande,proveedor,stock,imagenes', filter: `id=eq.${encodeURIComponent(id)}` });
@@ -272,7 +290,8 @@ function completarPlantilla(htmlSlides, valores) {
   return htmlSlides.map((html) => html.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (_, k) => escHtml(valores[k] ?? '')));
 }
 
-async function generarProductoUnico(sb, llamarClaude, { productoId, tema = TEMA, plantillaId, programadoPara } = {}) {
+async function generarProductoUnico(sb, llamarClaude, { productoId, tema, plantillaId, programadoPara } = {}) {
+  if (!tema) tema = await elegirTema(sb);
   let producto;
   if (productoId) {
     producto = await buscarProducto(sb, productoId);
@@ -343,9 +362,11 @@ async function generarInstitucional(sb, llamarClaude, { idea, programadoPara } =
   const t = parsearJson(await llamarClaude(promptInstitucional(idea, previas), { maxTokens: 1500 }));
   if (!t.frase || !t.texto) throw new Error('La IA no devolvió la frase; probá de nuevo');
   if (/\$\s?\d|\bprecios?\b/i.test(t.caption || '')) throw new Error('El caption generado menciona precios; volvé a generar');
+  const paletas = [...Array(PALETAS_INSTITUCIONAL).keys()];
+  const paleta = elegirDistinto(paletas, await recientesDe(sb, 'institucional', 'paleta', 2));
   const contenido = {
-    nombre: 'Institucional', frase: t.frase, texto: t.texto, idea: idea || null, historial: [], versiones: [],
-    html_slides: [await htmlDePlantilla('institucional', { frase: t.frase, texto: t.texto })],
+    nombre: 'Institucional', frase: t.frase, texto: t.texto, paleta, idea: idea || null, historial: [], versiones: [],
+    html_slides: [await htmlDePlantilla('institucional', { frase: t.frase, texto: t.texto, paleta })],
   };
   const slides = await renderizarYSubir(contenido.html_slides);
   const [borrador] = await sb('POST', 'publicaciones_borrador', {
@@ -390,7 +411,7 @@ async function htmlSlidesMulti(contenido, productosPorId) {
   const prods = contenido.productos;
   const total = prods.length + 2;
   const html = [await htmlDePlantilla('multi_portada', {
-    titulo: contenido.titulo, subtitulo: contenido.subtitulo,
+    titulo: contenido.titulo, subtitulo: contenido.subtitulo, variante: contenido.variante_portada || 0,
     fotos: prods.map((p) => imagenesDe(productosPorId[p.id])[0]),
   })];
   for (const [i, p] of prods.entries()) {
@@ -419,7 +440,12 @@ async function generarMulti(sb, llamarClaude, { idea, programadoPara } = {}) {
   if (!t.titulo) throw new Error('La IA no devolvió el título; probá de nuevo');
   if (/\$\s?\d|\bprecios?\b/i.test(t.caption || '')) throw new Error('El caption generado menciona precios; volvé a generar');
 
-  const contenido = { nombre: t.titulo, titulo: t.titulo, subtitulo: t.subtitulo || '', productos, idea: idea || null, historial: [], versiones: [] };
+  const variantes = [...Array(VARIANTES_MULTI).keys()];
+  const contenido = {
+    nombre: t.titulo, titulo: t.titulo, subtitulo: t.subtitulo || '', productos, idea: idea || null, historial: [], versiones: [],
+    variante_portada: elegirDistinto(variantes, await recientesDe(sb, 'multi', 'variante_portada', 2)),
+    desplazamiento: Math.floor(Math.random() * 4),
+  };
   contenido.html_slides = await htmlSlidesMulti(contenido, porId);
   const slides = await renderizarYSubir(contenido.html_slides);
   const [borrador] = await sb('POST', 'publicaciones_borrador', {

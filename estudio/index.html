@@ -61,8 +61,33 @@
   .icono-btn { background: none; border: 0; padding: 8px; border-radius: 10px; color: var(--tinta); }
   .icono-btn:hover { background: #EADFD2; }
 
-  #charla { flex: 1; overflow-y: auto; padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
-  #charla > * { flex-shrink: 0; }
+  .panel-vista { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .panel-vista > * { flex-shrink: 0; }
+  #vista-proceso { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .titulo-seccion { font-size: 22px; font-weight: 600; margin: 10px 0 0; letter-spacing: -0.01em; }
+  .vacio { background: var(--papel); border: 1px dashed var(--borde); border-radius: 16px; padding: 18px; color: var(--tinta-suave); }
+  .vacio .btn { margin-top: 12px; }
+
+  /* Aviso en la charla de que una publicación quedó para aprobar */
+  .nueva { align-self: stretch; display: flex; gap: 12px; align-items: center; background: #EEEAF8; border-radius: 16px; padding: 10px 12px; }
+  .nueva img { width: 64px; height: 80px; object-fit: cover; border-radius: 8px; background: #E4DCEF; }
+  .nueva div { flex: 1; font-size: 16px; line-height: 1.35; }
+  .nueva .btn { padding: 10px 14px; font-size: 16px; }
+
+  /* Programadas: filas compactas */
+  .fila-prog { display: flex; gap: 12px; align-items: center; background: var(--papel); border: 1px solid var(--borde); border-radius: 14px; padding: 10px; text-align: left; width: 100%; }
+  .fila-prog img { width: 56px; height: 70px; object-fit: cover; border-radius: 8px; background: #EEE4D8; flex: none; }
+  .fila-prog .cuando { font-weight: 600; font-size: 16px; }
+  .fila-prog .que { font-size: 15px; color: var(--tinta-suave); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+  /* Pestañas de abajo */
+  .pestanas { display: flex; background: var(--papel); border-top: 1px solid var(--borde); padding-bottom: env(safe-area-inset-bottom); }
+  .pestana { flex: 1; background: none; border: 0; padding: 10px 4px 12px; font-size: 15px; font-weight: 500; color: var(--tinta-suave); display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative; }
+  .pestana svg { width: 26px; height: 26px; }
+  .pestana[aria-selected="true"] { color: var(--tinta); font-weight: 600; }
+  .pestana[aria-selected="true"]::before { content: ''; position: absolute; top: 0; left: 30%; right: 30%; height: 3px; border-radius: 0 0 3px 3px; background: var(--lavanda-osc); }
+  .globo { position: absolute; top: 4px; left: calc(50% + 8px); min-width: 22px; height: 22px; border-radius: 11px; background: var(--coral); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 6px; }
+  .volver { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; color: var(--lavanda-osc); font-weight: 600; font-size: 16px; padding: 6px 4px; }
 
   .msg { max-width: 88%; padding: 12px 16px; border-radius: 18px; white-space: normal; overflow-wrap: anywhere; }
   .msg p { margin: 0 0 8px; } .msg p:last-child { margin-bottom: 0; }
@@ -126,12 +151,11 @@
   .error-tarjeta { margin: 8px 16px 0; padding: 8px 12px; background: #FCE9E2; border-radius: 10px; font-size: 15px; }
 
   /* Pie: menú + escribir */
-  footer { padding: 10px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); background: var(--crema); border-top: 1px solid var(--borde); }
+  footer { padding: 10px 16px 12px; background: var(--crema); border-top: 1px solid var(--borde); }
   .fila { display: flex; gap: 10px; align-items: flex-end; }
   #entrada { flex: 1; min-height: 52px; max-height: 160px; border: 1px solid var(--borde); border-radius: 16px; padding: 12px 14px; background: #fff; resize: none; line-height: 1.4; }
   #enviar { background: var(--tinta); color: #fff; border: 0; border-radius: 16px; padding: 0 20px; height: 52px; font-weight: 600; }
   #enviar:disabled { opacity: .45; }
-  #abrir-menu { background: none; border: 0; color: var(--lavanda-osc); font-weight: 600; font-size: 16px; padding: 0 2px 8px; }
 
   /* Ingreso */
   .ingreso { flex: 1; overflow-y: auto; padding: 32px 20px; display: flex; flex-direction: column; gap: 20px; }
@@ -185,32 +209,56 @@
     <button id="entrar" class="btn principal" type="button">Entrar</button>
   </section>
 
-  <!-- Charla -->
-  <section id="vista-charla" class="oculto" style="display:flex;flex-direction:column;flex:1;min-height:0">
+  <!-- App -->
+  <section id="vista-app" class="oculto" style="display:flex;flex-direction:column;flex:1;min-height:0">
     <header>
-      <img src="logo.png" alt="">
-      <div style="flex:1">
-        <h1>Estudio</h1>
+      <button class="volver oculto" id="volver" type="button" aria-label="Volver al inicio">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Inicio
+      </button>
+      <img src="logo.png" alt="" id="logo-cabecera">
+      <div style="flex:1;min-width:0">
+        <h1 id="titulo">Estudio</h1>
         <div class="quien" id="quien"></div>
       </div>
       <button class="icono-btn" id="opciones" type="button" aria-label="Opciones">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>
       </button>
     </header>
-    <main id="charla" aria-live="polite"></main>
-    <footer>
-      <button id="abrir-menu" type="button">Ver opciones</button>
-      <div class="fila">
-        <textarea id="entrada" rows="1" placeholder="Escribí acá…" aria-label="Mensaje"></textarea>
-        <button id="enviar" type="button">Enviar</button>
-      </div>
-    </footer>
+
+    <!-- Inicio: saludo y bloques -->
+    <main id="vista-inicio" class="panel-vista"></main>
+
+    <!-- Para aprobar -->
+    <main id="vista-aprobar" class="panel-vista oculto" aria-live="polite"></main>
+
+    <!-- Un proceso (reel, semana, ideas...): su propia charla -->
+    <section id="vista-proceso" class="oculto">
+      <main id="charla" class="panel-vista" aria-live="polite"></main>
+      <footer>
+        <div class="fila">
+          <textarea id="entrada" rows="1" placeholder="Escribí acá…" aria-label="Mensaje"></textarea>
+          <button id="enviar" type="button">Enviar</button>
+        </div>
+      </footer>
+    </section>
+
+    <nav class="pestanas" role="tablist" aria-label="Secciones">
+      <button class="pestana" role="tab" id="tab-inicio" type="button" aria-selected="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="10" width="7" height="10" rx="2"/><rect x="13.5" y="4" width="7" height="16" rx="2"/></svg>
+        Crear
+      </button>
+      <button class="pestana" role="tab" id="tab-aprobar" type="button" aria-selected="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3.5" width="16" height="17" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>
+        Para aprobar
+        <span class="globo oculto" id="globo"></span>
+      </button>
+    </nav>
   </section>
 </div>
 
 <div id="panel" class="panel oculto" role="dialog" aria-modal="true" aria-label="Opciones">
   <div>
-    <button class="btn secundario" type="button" id="op-borrar">Empezar una charla nueva</button>
+    <button class="btn secundario" type="button" id="op-borrar">Empezar de nuevo esta charla</button>
     <button class="btn secundario" type="button" id="op-usuario">Cambiar de persona</button>
     <button class="btn quieto" type="button" id="op-cerrar">Cerrar</button>
   </div>
@@ -220,15 +268,15 @@
 (() => {
   const SERVIDOR_DEFAULT = 'https://crearyjugargestion.onrender.com';
 
-  // Cada bloque del menú manda un pedido en palabras al asistente
-  const MENU = [
-    { titulo: 'Publicación del día', detalle: 'Según el calendario de hoy', color: 'turquesa', pedido: 'Armá la publicación de hoy según el calendario.' },
-    { titulo: 'Publicaciones de la semana', detalle: 'Todas juntas para aprobar', color: 'lavanda', pedido: 'Armá las publicaciones de la semana.' },
-    { titulo: 'Reel de productos', detalle: 'Qué filmar, toma por toma', color: 'coral', pedido: 'Quiero hacer un reel de productos. Proponeme uno con la lista de tomas.' },
-    { titulo: 'Reel de promoción', detalle: 'Para una oferta o descuento', color: 'amarillo', pedido: 'Quiero hacer un reel de promoción. Proponeme uno con la lista de tomas.' },
-    { titulo: 'Video institucional', detalle: 'Historia, filosofía, el local', color: 'verde', pedido: 'Quiero preparar un video institucional. Proponeme un tema, qué decir y qué filmar.' },
-    { titulo: 'Dame ideas', detalle: 'Tres ideas para esta semana', color: 'rosa', pedido: 'Dame ideas de contenido para esta semana.' },
-    { titulo: 'Para aprobar', detalle: 'Lo que espera tu visto bueno', color: 'crema', pedido: 'Mostrame las publicaciones que esperan aprobación.' },
+  // Cada bloque abre su propio proceso, con su charla aparte. "pedido" es lo primero que se le dice al asistente.
+  const PROCESOS = [
+    { id: 'dia', titulo: 'Publicación del día', detalle: 'Según el calendario de hoy', color: 'turquesa', pedido: 'Armá la publicación de hoy según el calendario.' },
+    { id: 'semana', titulo: 'Publicaciones de la semana', detalle: 'Todas juntas para aprobar', color: 'lavanda', pedido: 'Armá las publicaciones de la semana.' },
+    { id: 'reel-productos', titulo: 'Reel de productos', detalle: 'Qué filmar, toma por toma', color: 'coral', pedido: 'Quiero hacer un reel de productos. Proponeme uno con la lista de tomas.' },
+    { id: 'reel-promo', titulo: 'Reel de promoción', detalle: 'Para una oferta o descuento', color: 'amarillo', pedido: 'Quiero hacer un reel de promoción. Proponeme uno con la lista de tomas.' },
+    { id: 'institucional', titulo: 'Video institucional', detalle: 'Historia, filosofía, el local', color: 'verde', pedido: 'Quiero preparar un video institucional. Proponeme un tema, qué decir y qué filmar.' },
+    { id: 'ideas', titulo: 'Dame ideas', detalle: 'Tres ideas para esta semana', color: 'rosa', pedido: 'Dame ideas de contenido para esta semana.' },
+    { id: 'libre', titulo: 'Charla libre', detalle: 'Pedile lo que quieras', color: 'crema', pedido: '' },
   ];
 
   const $ = (s) => document.querySelector(s);
@@ -236,11 +284,15 @@
   const leer = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
 
   const cfg = leer('estudio_cfg', { servidor: SERVIDOR_DEFAULT, clave: '', usuario: '' });
-  let historial = [];   // [{ role, content, tarjetas? }]
+  let procesoActual = null;   // uno de PROCESOS mientras se está dentro de un proceso
+  let historial = [];         // charla del proceso actual: [{ role, content, tarjetas? }]
   let ocupado = false;
+  let saludo = null;          // última respuesta de /estudio/inicio
 
-  const claveHist = () => `estudio_hist_${cfg.usuario}`;
-  const guardarHist = () => guardar(claveHist(), historial.slice(-60));
+  // La publicación del día arranca una charla nueva cada día; los demás procesos se retoman donde quedaron
+  const hoy = () => new Date().toLocaleDateString('sv-SE');
+  const claveHist = (id) => `estudio_hist_${cfg.usuario}_${id}${id === 'dia' ? `_${hoy()}` : ''}`;
+  const guardarHist = () => procesoActual && guardar(claveHist(procesoActual.id), historial.slice(-60));
 
   async function api(ruta, { metodo = 'GET', body } = {}) {
     const r = await fetch(cfg.servidor.replace(/\/$/, '') + ruta, {
@@ -274,42 +326,98 @@
     return html;
   }
 
-  // --- Dibujar ---
-  const charla = () => $('#charla');
-  const alFinal = () => { const c = charla(); c.scrollTop = c.scrollHeight; };
-
-  function burbuja(clase, html) {
-    const d = document.createElement('div');
-    d.className = `msg ${clase}`;
-    d.innerHTML = html;
-    charla().appendChild(d);
+  function elemento(tag, clase, html) {
+    const d = document.createElement(tag);
+    if (clase) d.className = clase;
+    if (html != null) d.innerHTML = html;
     return d;
   }
 
-  function dibujarMenu() {
-    const g = document.createElement('div');
-    g.className = 'bloques';
-    for (const m of MENU) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = `bloque b-${m.color}`;
-      b.innerHTML = `<b>${esc(m.titulo)}</b><span>${esc(m.detalle)}</span>`;
-      b.addEventListener('click', () => enviar(m.pedido));
-      g.appendChild(b);
-    }
-    charla().appendChild(g);
-    return g;
+  // --- Navegación entre secciones ---
+  function mostrarSeccion(nombre) {
+    $('#vista-inicio').classList.toggle('oculto', nombre !== 'inicio');
+    $('#vista-aprobar').classList.toggle('oculto', nombre !== 'aprobar');
+    $('#vista-proceso').classList.toggle('oculto', nombre !== 'proceso');
+    $('#tab-inicio').setAttribute('aria-selected', String(nombre !== 'aprobar'));
+    $('#tab-aprobar').setAttribute('aria-selected', String(nombre === 'aprobar'));
+    $('#volver').classList.toggle('oculto', nombre !== 'proceso');
+    $('#logo-cabecera').classList.toggle('oculto', nombre === 'proceso');
+    $('#titulo').textContent = nombre === 'proceso' ? procesoActual.titulo : nombre === 'aprobar' ? 'Para aprobar' : 'Estudio';
+    $('#op-borrar').classList.toggle('oculto', nombre !== 'proceso');
+    if (nombre !== 'proceso') procesoActual = null;
   }
 
+  function actualizarGlobo(n) {
+    const g = $('#globo');
+    g.textContent = n > 9 ? '9+' : String(n);
+    g.classList.toggle('oculto', !n);
+    $('#tab-aprobar').setAttribute('aria-label', n ? `Para aprobar, ${n} esperando` : 'Para aprobar');
+  }
+
+  // --- Inicio ---
+  function dibujarInicio() {
+    const v = $('#vista-inicio');
+    v.innerHTML = '';
+    v.appendChild(elemento('div', saludo ? 'msg asistente' : 'msg asistente', saludo ? formato(saludo.saludo) : '<span class="pensando" aria-label="Cargando"><i></i><i></i><i></i></span>'));
+    const g = elemento('div', 'bloques');
+    for (const p of PROCESOS) {
+      const b = elemento('button', `bloque b-${p.color}`, `<b>${esc(p.titulo)}</b><span>${esc(p.detalle)}</span>`);
+      b.type = 'button';
+      b.addEventListener('click', () => abrirProceso(p));
+      g.appendChild(b);
+    }
+    v.appendChild(g);
+  }
+
+  async function cargarResumen() {
+    try {
+      saludo = await api(`/estudio/inicio?usuario=${encodeURIComponent(cfg.usuario)}`);
+      actualizarGlobo(saludo.pendientes?.length || 0);
+    } catch (e) {
+      saludo = { saludo: e.message, pendientes: [], programados: [], error: true };
+    }
+    if (!$('#vista-inicio').classList.contains('oculto')) dibujarInicio();
+    if (!$('#vista-aprobar').classList.contains('oculto')) dibujarAprobar();
+  }
+
+  // --- Para aprobar ---
   function textoEstado(t) {
     if (t.estado === 'publicado') return 'Publicada';
     if (t.estado === 'aprobado') return t.programado_legible ? `Aprobada · sale el ${t.programado_legible}` : 'Aprobada · sin fecha asignada';
     return 'Esperando tu aprobación';
   }
 
+  function dibujarAprobar() {
+    const v = $('#vista-aprobar');
+    v.innerHTML = '';
+    if (!saludo) { v.appendChild(elemento('div', 'msg asistente', '<span class="pensando" aria-label="Cargando"><i></i><i></i><i></i></span>')); return; }
+    if (saludo.error) { v.appendChild(elemento('div', 'msg error', formato(saludo.saludo))); return; }
+    const pend = saludo.pendientes || [];
+    if (!pend.length) {
+      const vacio = elemento('div', 'vacio', 'No hay nada esperando tu aprobación. Cuando armemos publicaciones nuevas, aparecen acá.');
+      const b = elemento('button', 'btn principal', 'Armar la publicación de hoy');
+      b.type = 'button';
+      b.addEventListener('click', () => abrirProceso(PROCESOS[0]));
+      vacio.appendChild(b);
+      v.appendChild(vacio);
+    } else {
+      pend.forEach((t) => dibujarTarjeta(t, v));
+    }
+    const prog = saludo.programados || [];
+    if (prog.length) {
+      v.appendChild(elemento('h2', 'titulo-seccion', 'Ya programadas'));
+      for (const t of prog) {
+        const fila = elemento('button', 'fila-prog', `${t.slides?.[0] ? `<img src="${esc(t.slides[0])}" alt="">` : ''}
+          <div><div class="cuando">Sale el ${esc(t.programado_legible || 'próximo horario')}</div><div class="que">${esc((t.caption || '').split('\n')[0])}</div></div>`);
+        fila.type = 'button';
+        fila.addEventListener('click', () => { fila.replaceWith(dibujarTarjeta(t, document.createElement('div'))); });
+        v.appendChild(fila);
+      }
+    }
+  }
+
   function dibujarTarjeta(t, contenedor) {
-    const d = document.createElement('article');
-    d.className = 'tarjeta';
+    const d = elemento('article', 'tarjeta');
     d.dataset.estado = t.estado;
     d.innerHTML = `
       <div class="estado">${esc(textoEstado(t))}</div>
@@ -339,8 +447,14 @@
       const a = e.target.closest('[data-a]')?.dataset.a;
       if (a) accionTarjeta(a, t, d);
     });
-    (contenedor || charla()).appendChild(d);
+    contenedor.appendChild(d);
     return d;
+  }
+
+  function avisoEn(el, clase, texto) {
+    const a = elemento('div', `msg ${clase}`, formato(texto));
+    el.insertAdjacentElement('afterend', a);
+    return a;
   }
 
   async function accionTarjeta(accion, t, el) {
@@ -353,59 +467,85 @@
     try {
       if (accion === 'aprobar') {
         const r = await api(`/estudio/piezas/${encodeURIComponent(t.id)}/aprobar`, { metodo: 'POST' });
-        const nueva = dibujarTarjeta(r.tarjeta, document.createElement('div'));
-        el.replaceWith(nueva);
-        let txt = r.tarjeta.programado_legible ? `Aprobada. Sale el ${r.tarjeta.programado_legible}.` : 'Aprobada. Todavía no tiene fecha: pedime que la programe.';
+        let txt = r.tarjeta.programado_legible ? `Aprobada. Sale el ${r.tarjeta.programado_legible}.` : 'Aprobada. Todavía no tiene fecha: pedímelo en la charla libre y la programo.';
         if (!r.instagram_conectado) txt += ' (Instagram no está conectado: avisale a Pablo.)';
-        anotar('aviso', txt);
+        const aviso = avisoEn(el, 'aviso', txt);
+        el.remove();
+        setTimeout(() => { aviso.remove(); cargarResumen(); }, 2500);
       } else if (accion === 'descartar') {
         await api(`/estudio/piezas/${encodeURIComponent(t.id)}`, { metodo: 'DELETE' });
         el.remove();
-        anotar('aviso', 'Publicación descartada.');
+        cargarResumen();
       } else if (accion === 'mandar-cambios') {
         const pedido = panel.querySelector('textarea').value.trim();
         if (!pedido) { botones.forEach((b) => (b.disabled = false)); return; }
         panel.classList.add('oculto');
-        const espera = burbuja('asistente', '<span class="pensando" aria-label="Haciendo los cambios"><i></i><i></i><i></i></span> Haciendo los cambios, tarda cerca de un minuto…');
-        alFinal();
+        const espera = avisoEn(el, 'asistente', '<span class="pensando" aria-label="Haciendo los cambios"><i></i><i></i><i></i></span> Haciendo los cambios, tarda cerca de un minuto…');
         try {
           const r = await api(`/estudio/piezas/${encodeURIComponent(t.id)}/cambios`, { metodo: 'POST', body: { pedido } });
           espera.remove();
-          el.replaceWith(dibujarTarjeta(r.tarjeta, document.createElement('div')));
-          anotar('aviso', 'Listo, ya está con los cambios.');
+          const nueva = dibujarTarjeta(r.tarjeta, document.createElement('div'));
+          el.replaceWith(nueva);
+          const ok = avisoEn(nueva, 'aviso', 'Listo, ya está con los cambios.');
+          setTimeout(() => ok.remove(), 3000);
         } catch (e) { espera.remove(); throw e; }
       }
     } catch (e) {
       botones.forEach((b) => (b.disabled = false));
-      anotar('error', e.message);
+      avisoEn(el, 'error', e.message);
     }
   }
 
-  function anotar(clase, texto) {
-    burbuja(clase, formato(texto));
-    alFinal();
+  // --- Procesos: cada uno con su charla ---
+  const charla = () => $('#charla');
+  const alFinal = () => { const c = charla(); c.scrollTop = c.scrollHeight; };
+
+  function burbuja(clase, html) {
+    const d = elemento('div', `msg ${clase}`, html);
+    charla().appendChild(d);
+    return d;
   }
 
-  function dibujarHistorial() {
+  // Lo que se arma en una charla no se muestra entero acá: queda en "Para aprobar"
+  function avisoNuevas(tarjetas) {
+    if (!tarjetas?.length) return;
+    const n = tarjetas.length;
+    const d = elemento('div', 'nueva', `${tarjetas[0].slides?.[0] ? `<img src="${esc(tarjetas[0].slides[0])}" alt="">` : ''}
+      <div>${n === 1 ? 'Te dejé la publicación' : `Te dejé ${n} publicaciones`} en <b>Para aprobar</b>.</div>`);
+    const b = elemento('button', 'btn principal', 'Ver');
+    b.type = 'button';
+    b.addEventListener('click', () => { mostrarSeccion('aprobar'); dibujarAprobar(); });
+    d.appendChild(b);
+    charla().appendChild(d);
+  }
+
+  function abrirProceso(p) {
+    procesoActual = p;
+    historial = leer(claveHist(p.id), []);
+    mostrarSeccion('proceso');
+    charla().innerHTML = '';
     for (const m of historial) {
-      if (m.role === 'user') burbuja('yo', formato(m.content));
-      else {
-        burbuja('asistente', formato(m.content));
-        (m.tarjetas || []).forEach((t) => dibujarTarjeta(t));
-      }
+      burbuja(m.role === 'user' ? 'yo' : 'asistente', formato(m.content));
+      if (m.role === 'assistant') avisoNuevas(m.tarjetas);
     }
+    alFinal();
+    if (!historial.length) {
+      if (p.pedido) enviar(p.pedido);
+      else burbuja('asistente', formato(`Hola ${cfg.usuario}. Contame qué necesitás: una publicación sobre algún producto, una idea para una fecha especial, un texto para una historia… lo que sea.`));
+    }
+    if (window.matchMedia('(min-width: 700px)').matches) $('#entrada').focus();
   }
 
-  // --- Conversar ---
   async function enviar(texto) {
     texto = String(texto || '').trim();
-    if (!texto || ocupado) return;
+    if (!texto || ocupado || !procesoActual) return;
+    const proceso = procesoActual;
     ocupado = true;
     $('#enviar').disabled = true;
     historial.push({ role: 'user', content: texto });
     guardarHist();
     burbuja('yo', formato(texto));
-    const lento = /armá|crea|hac[eé]|publicaci/i.test(texto);
+    const lento = /armá|crea|hac[eé]|publicaci|semana/i.test(texto);
     const espera = burbuja('asistente', `<span class="pensando" aria-label="Pensando"><i></i><i></i><i></i></span>${lento ? ' Si tengo que armar publicaciones, tarda cerca de un minuto cada una…' : ''}`);
     alFinal();
     try {
@@ -413,59 +553,52 @@
         metodo: 'POST',
         body: { usuario: cfg.usuario, mensajes: historial.map((m) => ({ role: m.role, content: m.content })) },
       });
-      espera.remove();
-      historial.push({ role: 'assistant', content: r.texto, tarjetas: r.tarjetas || [] });
-      guardarHist();
-      burbuja('asistente', formato(r.texto));
-      (r.tarjetas || []).forEach((t) => dibujarTarjeta(t));
+      const tarjetas = (r.tarjetas || []).map((t) => ({ id: t.id, slides: (t.slides || []).slice(0, 1) }));
+      historial.push({ role: 'assistant', content: r.texto, tarjetas });
+      if (procesoActual === proceso) {
+        espera.remove();
+        guardarHist();
+        burbuja('asistente', formato(r.texto));
+        avisoNuevas(tarjetas);
+      } else {
+        // La persona se fue a otra sección mientras esperaba: igual queda guardado en ese proceso
+        guardar(claveHist(proceso.id), historial.slice(-60));
+      }
+      if (tarjetas.length) cargarResumen();
     } catch (e) {
-      espera.remove();
       historial.pop();
-      guardarHist();
-      anotar('error', e.message);
+      if (procesoActual === proceso) {
+        espera.remove();
+        guardarHist();
+        burbuja('error', formato(e.message));
+      }
     } finally {
       ocupado = false;
       $('#enviar').disabled = false;
-      alFinal();
+      if (procesoActual === proceso) alFinal();
     }
-  }
-
-  async function iniciar() {
-    $('#quien').textContent = cfg.usuario;
-    charla().innerHTML = '';
-    historial = leer(claveHist(), []);
-    if (historial.length) {
-      dibujarHistorial();
-      burbuja('aviso', '— Hoy —');
-    }
-    const espera = burbuja('asistente', '<span class="pensando" aria-label="Cargando"><i></i><i></i><i></i></span>');
-    try {
-      const r = await api(`/estudio/inicio?usuario=${encodeURIComponent(cfg.usuario)}`);
-      espera.innerHTML = formato(r.saludo);
-      dibujarMenu();
-      if (r.pendientes?.length) {
-        anotar('aviso', r.pendientes.length === 1 ? 'Esta espera tu aprobación:' : 'Estas esperan tu aprobación:');
-        r.pendientes.forEach((t) => dibujarTarjeta(t));
-      }
-    } catch (e) {
-      espera.className = 'msg error';
-      espera.innerHTML = formato(e.message);
-      dibujarMenu();
-    }
-    alFinal();
   }
 
   // --- Ingreso ---
-  function mostrar(vista) {
+  function mostrarVista(vista) {
     $('#vista-ingreso').classList.toggle('oculto', vista !== 'ingreso');
-    $('#vista-charla').classList.toggle('oculto', vista !== 'charla');
+    $('#vista-app').classList.toggle('oculto', vista !== 'app');
   }
 
   function abrirIngreso() {
     $('#servidor').value = cfg.servidor || SERVIDOR_DEFAULT;
     $('#clave').value = cfg.clave || '';
     document.querySelectorAll('.persona').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.nombre === cfg.usuario)));
-    mostrar('ingreso');
+    mostrarVista('ingreso');
+  }
+
+  function iniciar() {
+    $('#quien').textContent = cfg.usuario;
+    saludo = null;
+    mostrarVista('app');
+    mostrarSeccion('inicio');
+    dibujarInicio();
+    cargarResumen();
   }
 
   document.querySelectorAll('.persona').forEach((b) => b.addEventListener('click', () => {
@@ -473,7 +606,7 @@
     b.setAttribute('aria-pressed', 'true');
   }));
 
-  $('#entrar').addEventListener('click', async () => {
+  $('#entrar').addEventListener('click', () => {
     const elegido = document.querySelector('.persona[aria-pressed="true"]');
     const error = $('#error-ingreso');
     const nuevo = { servidor: ($('#servidor').value || SERVIDOR_DEFAULT).trim(), clave: $('#clave').value.trim(), usuario: elegido?.dataset.nombre || '' };
@@ -482,9 +615,13 @@
     error.classList.add('oculto');
     Object.assign(cfg, nuevo);
     guardar('estudio_cfg', cfg);
-    mostrar('charla');
     iniciar();
   });
+
+  // --- Pestañas y navegación ---
+  $('#tab-inicio').addEventListener('click', () => { mostrarSeccion('inicio'); dibujarInicio(); });
+  $('#tab-aprobar').addEventListener('click', () => { mostrarSeccion('aprobar'); dibujarAprobar(); cargarResumen(); });
+  $('#volver').addEventListener('click', () => { mostrarSeccion('inicio'); dibujarInicio(); });
 
   // --- Escribir ---
   const entrada = $('#entrada');
@@ -493,19 +630,25 @@
     if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(min-width: 700px)').matches) { e.preventDefault(); $('#enviar').click(); }
   });
   $('#enviar').addEventListener('click', () => { const t = entrada.value; entrada.value = ''; entrada.style.height = 'auto'; enviar(t); });
-  $('#abrir-menu').addEventListener('click', () => { dibujarMenu(); alFinal(); });
 
   // --- Opciones ---
   const panel = $('#panel');
   $('#opciones').addEventListener('click', () => panel.classList.remove('oculto'));
   $('#op-cerrar').addEventListener('click', () => panel.classList.add('oculto'));
   panel.addEventListener('click', (e) => { if (e.target === panel) panel.classList.add('oculto'); });
-  $('#op-borrar').addEventListener('click', () => { historial = []; guardarHist(); panel.classList.add('oculto'); iniciar(); });
+  $('#op-borrar').addEventListener('click', () => {
+    panel.classList.add('oculto');
+    if (!procesoActual) return;
+    const p = procesoActual;
+    historial = [];
+    guardar(claveHist(p.id), []);
+    abrirProceso(p);
+  });
   $('#op-usuario').addEventListener('click', () => { panel.classList.add('oculto'); abrirIngreso(); });
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-  if (cfg.clave && cfg.usuario) { mostrar('charla'); iniciar(); } else abrirIngreso();
+  if (cfg.clave && cfg.usuario) iniciar(); else abrirIngreso();
 })();
 </script>
 </body>
